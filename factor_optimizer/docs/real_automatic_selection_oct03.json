@@ -1,0 +1,3712 @@
+{
+  "audit": "real-automatic-selection-v1",
+  "source": {
+    "sources": [
+      {
+        "factor": "weekly_4cbd7ca6dccc61dc",
+        "uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/factor_values/35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59/weekly_4cbd7ca6dccc61dc.parquet",
+        "etag": "91da3ad8a2d54f3f35911e231bfcffa8",
+        "sha256": "35ad096b62be98ce5766fe3df4e651bd7930ee377683d6282171a6984ed14a59",
+        "downloaded_bytes": 5400494,
+        "manifest_sha256": "00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66",
+        "source_status": "evaluated_optimization_pending",
+        "expression": "ts_delta(col('valuation.free_cap'), 20)"
+      }
+    ],
+    "days": 500,
+    "assets": 256,
+    "coverage_policy": "isolate",
+    "retained_factor_ids": [
+      "weekly_4cbd7ca6dccc61dc"
+    ],
+    "quarantined_factors": [],
+    "train_eligible_assets": {
+      "weekly_4cbd7ca6dccc61dc": 5071
+    },
+    "manifest_uri": "cos://qs-cold/candidate_pool/sunhaiwei/lqtp_show/metadata/00e545d254ca742305a37405a69ffe55e9a04448d0f176282c4f07997f1feb66/landing_manifest.json",
+    "max_factor_bytes": 8388608,
+    "max_batch_factor_bytes": 134217728,
+    "asset_selection_split": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "asset_selection_train_days": 267,
+    "date_span": [
+      "2024-08-02",
+      "2026-08-25"
+    ],
+    "selection": "first eligible bound manifest factor IDs; assets selected on TRAIN coverage only",
+    "limitations": "source-declared lineage; no upstream PIT or investability certification"
+  },
+  "source_fingerprints": {
+    "before": "3f378d8bca581c3df28b447c061e77b084ed9d964ce02daafba5295062f03445",
+    "after": "3f378d8bca581c3df28b447c061e77b084ed9d964ce02daafba5295062f03445"
+  },
+  "batch_shape": [
+    500,
+    256,
+    1
+  ],
+  "test_evaluated": false,
+  "split": {
+    "identity": "3e268f1bac7b452f741f0b934f2a0edcf88a677aa982bf2391340da25c0da9e9",
+    "train_days": 267,
+    "validation_days": 97,
+    "test_days_reserved": 100
+  },
+  "selection_semantics": "TRAIN searches; VALIDATION checks only the frozen winner; TEST labels unscored",
+  "limitations": "One real factor; research diagnostics, not production admission or guaranteed improvement. Source fingerprints cover data/provenance, not complete runtime closure.",
+  "automatic": {
+    "weekly_4cbd7ca6dccc61dc": {
+      "status": "improved",
+      "selected_family": "INVERTED_U_REPAIR",
+      "reason": "TRAIN winner passed held-out paired block bound",
+      "plan_identity": "7479be35f767b16a8d3f172fb2cd16e256b5e69ed95d0c72546cc315988b2d11",
+      "train_gain": 0.19748767863804817,
+      "validation_lower_bound": 0.11991104570126997,
+      "validation_candidate_identity": "7479be35f767b16a8d3f172fb2cd16e256b5e69ed95d0c72546cc315988b2d11",
+      "validation_coverage": 1.0,
+      "materialization_error": null,
+      "candidate_budget": {
+        "required": 116,
+        "maximum": 128,
+        "status": "admitted",
+        "evaluated": 29,
+        "raw_required": 120,
+        "unique_required": 116,
+        "deduplicated": 4
+      },
+      "baseline_diagnostics": {
+        "operations": [
+          "winsor",
+          "cs_rank"
+        ],
+        "omissions": [
+          "neutralization_missing_exposures"
+        ],
+        "accepted": true,
+        "reason": "no_substantial_training_degradation",
+        "coverage": 1.0,
+        "valid_days": 267,
+        "upper_bound": 6.316358793998631e-06,
+        "maximum_loss": 0.01,
+        "joint_policy": "joint.v1",
+        "joint_raw": {
+          "rank_ic": -0.0036978994219487417,
+          "rank_icir": -0.05617737834536126,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "joint_candidate": {
+          "rank_ic": -0.003706877545630786,
+          "rank_icir": -0.05631919210281105,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        }
+      },
+      "joint_diagnostics": {
+        "objective": "joint",
+        "empty_leg_policy": "signal_cash",
+        "cost_rate": 0.001,
+        "policy": "joint.v1",
+        "baseline_train_raw": {
+          "rank_ic": -0.0036978994219487417,
+          "rank_icir": -0.05617737834536126,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "baseline_train_candidate": {
+          "rank_ic": -0.003706877545630786,
+          "rank_icir": -0.05631919210281105,
+          "sharpe": 1.80241977526469,
+          "max_drawdown": 0.1638542245618701,
+          "turnover": 0.056956044411153275,
+          "worst_block_sharpe": 0.6636481299873691
+        },
+        "validation_raw": {
+          "rank_ic": -0.021545540791352992,
+          "rank_icir": -0.3356850168329666,
+          "sharpe": -0.17736527725074852,
+          "max_drawdown": 0.0955056093392171,
+          "turnover": 0.04116319287839191,
+          "worst_block_sharpe": -3.3452684724986037
+        },
+        "validation_candidate": {
+          "rank_ic": 0.014048856163841064,
+          "rank_icir": 0.2168321638798162,
+          "sharpe": 0.8770727917970135,
+          "max_drawdown": 0.0771727589461275,
+          "turnover": 0.036342644495083065,
+          "worst_block_sharpe": -1.1699518574783303
+        },
+        "comparison_status": "SUPERIOR"
+      },
+      "candidates": [
+        {
+          "family": "ABANDON",
+          "parameters": {},
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: ABANDON has no executable value-level mapping"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "56a9096b604b0fef156dc452867c8c11832f13e15675a6013d1cc45bf000e72b",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.007052860178199,
+            "rank_icir": -0.10260741014452003,
+            "sharpe": -1.1005456654091987,
+            "max_drawdown": 0.08413680802883405,
+            "turnover": 0.05902385614858377,
+            "worst_block_sharpe": -2.4428805122473203
+          },
+          "raw_rank_ic_fold_gain": -0.00957378707612213,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "d73f15fe1b75abaf677d2978bf669eb99d5de1a12752e11b7ee8581ea864b70f",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.007052860178199,
+            "rank_icir": 0.10260741014452003,
+            "sharpe": 0.48882974568171295,
+            "max_drawdown": 0.0816477804610388,
+            "turnover": 0.07084655323372224,
+            "worst_block_sharpe": -1.1982062907800295
+          },
+          "raw_rank_ic_fold_gain": 0.0037771015776044995,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 5.0,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "execution_aliases": [
+            {
+              "family": "DECAY_REFINEMENT",
+              "parameters": {
+                "decay": 0.5,
+                "half_life_relative": true
+              },
+              "orientation": 1,
+              "plan_identity": "cc27b25c3645e5108ff95a48062095559645c8364ad82284ca2e3e308486cd87",
+              "base_plan_identity": "e7b51444d496420ea60e53bc924a6825dd9471c144e9982d47150ad3e8c8f9d5",
+              "diagnosed_issues": []
+            },
+            {
+              "family": "CAUSAL_SMOOTHING",
+              "parameters": {
+                "halflife": 5.0,
+                "min_periods": 1
+              },
+              "orientation": 1,
+              "plan_identity": "8f70e324cd481ca5c82a06819a3dfef619d1d36aea0cbc20a2655e925884415e",
+              "base_plan_identity": "a52e0670fc53cded3ee587c5981f516f472f9bb982a4cfe050e677cdf0bb8d93",
+              "diagnosed_issues": []
+            }
+          ],
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "8f70e324cd481ca5c82a06819a3dfef619d1d36aea0cbc20a2655e925884415e",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005339490448603777,
+            "rank_icir": -0.07570338151060946,
+            "sharpe": -1.6454482028748565,
+            "max_drawdown": 0.08033607984750514,
+            "turnover": 0.04890731246136503,
+            "worst_block_sharpe": -3.7892834685582684
+          },
+          "raw_rank_ic_fold_gain": -0.008226581805786264,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.5,
+            "half_life_relative": true
+          },
+          "orientation": -1,
+          "execution_aliases": [
+            {
+              "family": "DECAY_REFINEMENT",
+              "parameters": {
+                "decay": 0.5,
+                "half_life_relative": true
+              },
+              "orientation": -1,
+              "plan_identity": "0eeced29558180288d9f80671970b2f69446a84d672b0f0992dde8e89d1806ae",
+              "base_plan_identity": "e7b51444d496420ea60e53bc924a6825dd9471c144e9982d47150ad3e8c8f9d5",
+              "diagnosed_issues": [
+                "negative_rank_ic"
+              ]
+            },
+            {
+              "family": "CAUSAL_SMOOTHING",
+              "parameters": {
+                "halflife": 5.0,
+                "min_periods": 1
+              },
+              "orientation": -1,
+              "plan_identity": "7229d0f5a4f64bf9cebc81e8762a0d3b2abb2e5649c63b27fa48365e55f45282",
+              "base_plan_identity": "a52e0670fc53cded3ee587c5981f516f472f9bb982a4cfe050e677cdf0bb8d93",
+              "diagnosed_issues": [
+                "negative_rank_ic"
+              ]
+            }
+          ],
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "0eeced29558180288d9f80671970b2f69446a84d672b0f0992dde8e89d1806ae",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005339490448603777,
+            "rank_icir": 0.07570338151060946,
+            "sharpe": 1.1170497687071281,
+            "max_drawdown": 0.024598706727342858,
+            "turnover": 0.04883458783316969,
+            "worst_block_sharpe": -0.8143644094719301
+          },
+          "raw_rank_ic_fold_gain": 0.00183299651564114,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "ab298cfa5327894d396274d30de3c09cb0e8f3b9d625fae8b13708439acb73c6",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005641208729479055,
+            "rank_icir": -0.08080075333818662,
+            "sharpe": -1.8125175864287943,
+            "max_drawdown": 0.08699073368560964,
+            "turnover": 0.050070906512490444,
+            "worst_block_sharpe": -3.5992045642389994
+          },
+          "raw_rank_ic_fold_gain": -0.0075593630877315975,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "ae87f7a2b7107bc8d9e553ebea5c32754ab06ec2a69da41fe8a10ce5a3121185",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005641208729479055,
+            "rank_icir": 0.08080075333818662,
+            "sharpe": 1.027007021512679,
+            "max_drawdown": 0.023053594944126826,
+            "turnover": 0.04999818188429511,
+            "worst_block_sharpe": -0.8814375021253512
+          },
+          "raw_rank_ic_fold_gain": 0.002794893663778323,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "DECAY_REFINEMENT",
+          "parameters": {
+            "decay": 0.8,
+            "half_life_relative": true
+          },
+          "orientation": 1,
+          "execution_aliases": [
+            {
+              "family": "DECAY_REFINEMENT",
+              "parameters": {
+                "decay": 0.8,
+                "half_life_relative": true
+              },
+              "orientation": 1,
+              "plan_identity": "399de78ed31c2019ae5e252b636f4959cc0d1fabcf99431a9435256a556911a0",
+              "base_plan_identity": "70c17fac6ab6955fa63cde0e4617c8d85fccca8432072e50c00a9c497cf6b3fb",
+              "diagnosed_issues": []
+            },
+            {
+              "family": "CAUSAL_SMOOTHING",
+              "parameters": {
+                "halflife": 8.0,
+                "min_periods": 1
+              },
+              "orientation": 1,
+              "plan_identity": "be77b56f9b75e0c2e2aa7bd9cc73aacb2ade3d6f161f8ef9676dd6ae57d1b723",
+              "base_plan_identity": "b23a78db0edf5b966559c2704f1c3e9265e1997b1c3c5fabe18598d78a98b8f6",
+              "diagnosed_issues": []
+            }
+          ],
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "399de78ed31c2019ae5e252b636f4959cc0d1fabcf99431a9435256a556911a0",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0057468998183544395,
+            "rank_icir": -0.08201262868500518,
+            "sharpe": -1.4027703250059929,
+            "max_drawdown": 0.07649748966223721,
+            "turnover": 0.04672557361550488,
+            "worst_block_sharpe": -3.863834396803704
+          },
+          "raw_rank_ic_fold_gain": -0.008912391191682387,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 8.0,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "execution_aliases": [
+            {
+              "family": "DECAY_REFINEMENT",
+              "parameters": {
+                "decay": 0.8,
+                "half_life_relative": true
+              },
+              "orientation": -1,
+              "plan_identity": "8476402a4e80a7b3d7fd8d0c79cdd518ce81fa62bd5c079f74c39d7221c96af4",
+              "base_plan_identity": "70c17fac6ab6955fa63cde0e4617c8d85fccca8432072e50c00a9c497cf6b3fb",
+              "diagnosed_issues": [
+                "negative_rank_ic"
+              ]
+            },
+            {
+              "family": "CAUSAL_SMOOTHING",
+              "parameters": {
+                "halflife": 8.0,
+                "min_periods": 1
+              },
+              "orientation": -1,
+              "plan_identity": "19a2f5bdc8bd08814abd0003598a3cbe7d8c79e2648f8df33b4cdd7184ced579",
+              "base_plan_identity": "b23a78db0edf5b966559c2704f1c3e9265e1997b1c3c5fabe18598d78a98b8f6",
+              "diagnosed_issues": [
+                "negative_rank_ic"
+              ]
+            }
+          ],
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "19a2f5bdc8bd08814abd0003598a3cbe7d8c79e2648f8df33b4cdd7184ced579",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0057468998183544395,
+            "rank_icir": 0.08201262868500518,
+            "sharpe": 1.2397140220024812,
+            "max_drawdown": 0.022308448630458104,
+            "turnover": 0.046289225846332854,
+            "worst_block_sharpe": -0.7431992060954875
+          },
+          "raw_rank_ic_fold_gain": 0.0016636674017901478,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "INDUSTRY_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "industry",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: INDUSTRY_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "7611ba2beec5d6b7a2d0c11f8c3724b77bfe7791dfd197d28ff91a38fbe7fc2a",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011611253639524744,
+            "rank_icir": 0.15227355761074507,
+            "sharpe": 2.2212868678328475,
+            "max_drawdown": 0.129663725148069,
+            "turnover": 0.04771491782359296,
+            "worst_block_sharpe": 1.3637343284590624
+          },
+          "raw_rank_ic_fold_gain": 0.009709840010383313,
+          "status": "train_evaluated",
+          "train_gain": 0.1926335353601913
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "1ff72585702fb6e582b0fdf5f2312fd1086e35ffc34a67b3d432fff4105de35d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011611253639524744,
+            "rank_icir": 0.15227355761074507,
+            "sharpe": 2.2212868678328475,
+            "max_drawdown": 0.129663725148069,
+            "turnover": 0.04771491782359296,
+            "worst_block_sharpe": 1.3637343284590624
+          },
+          "raw_rank_ic_fold_gain": 0.009709840010383313,
+          "status": "train_evaluated",
+          "train_gain": 0.1926335353601913
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "66c4b482beca199150cf47772cf79ab8f83ac544833e2809a9dd4df4ad13eef4",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011601525139291163,
+            "rank_icir": 0.15150098618656985,
+            "sharpe": 2.229894758218032,
+            "max_drawdown": 0.12849920647832908,
+            "turnover": 0.04837233463702233,
+            "worst_block_sharpe": 1.4894837559870657
+          },
+          "raw_rank_ic_fold_gain": 0.009168883624775389,
+          "status": "train_evaluated",
+          "train_gain": 0.1969564892146704
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "adedd71e0f3065f54fa4c1483bb0ddfef5e27874e5a579d59bda27578453920e",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011601525139291163,
+            "rank_icir": 0.15150098618656985,
+            "sharpe": 2.229894758218032,
+            "max_drawdown": 0.12849920647832908,
+            "turnover": 0.04837233463702233,
+            "worst_block_sharpe": 1.4894837559870657
+          },
+          "raw_rank_ic_fold_gain": 0.009168883624775389,
+          "status": "train_evaluated",
+          "train_gain": 0.1969564892146704
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "3211e7729e3d371462656c1898dd4fefdfb8740df40ec50964f6fd6fddb32234",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.01029763628597614,
+            "rank_icir": 0.13340336484843202,
+            "sharpe": 2.2239322515945337,
+            "max_drawdown": 0.12777097379237734,
+            "turnover": 0.047108886004329345,
+            "worst_block_sharpe": 1.4549331689503322
+          },
+          "raw_rank_ic_fold_gain": 0.007775924899270909,
+          "status": "train_evaluated",
+          "train_gain": 0.18518183621148177
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "e164410c47d79a8bb0de9dcb48a12d55419857a7a0377b7ce40c7f3b9324eae4",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.01029763628597614,
+            "rank_icir": 0.13340336484843202,
+            "sharpe": 2.2239322515945337,
+            "max_drawdown": 0.12777097379237734,
+            "turnover": 0.047108886004329345,
+            "worst_block_sharpe": 1.4549331689503322
+          },
+          "raw_rank_ic_fold_gain": 0.007775924899270909,
+          "status": "train_evaluated",
+          "train_gain": 0.18518183621148177
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "f96c7d13173614f944bebf354ad9ea5e825866d4d5543a3ad9d1d865a9a73d24",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011729688009303168,
+            "rank_icir": 0.15336573774673717,
+            "sharpe": 2.2372795352210124,
+            "max_drawdown": 0.12934437133817578,
+            "turnover": 0.04788201268799268,
+            "worst_block_sharpe": 1.4578999910225783
+          },
+          "raw_rank_ic_fold_gain": 0.009275186094205827,
+          "status": "train_evaluated",
+          "train_gain": 0.19748767863804817
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "7479be35f767b16a8d3f172fb2cd16e256b5e69ed95d0c72546cc315988b2d11",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011729688009303168,
+            "rank_icir": 0.15336573774673717,
+            "sharpe": 2.2372795352210124,
+            "max_drawdown": 0.12934437133817578,
+            "turnover": 0.04788201268799268,
+            "worst_block_sharpe": 1.4578999910225783
+          },
+          "raw_rank_ic_fold_gain": 0.009275186094205827,
+          "status": "train_evaluated",
+          "train_gain": 0.19748767863804817
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "d496a6a909b3ae014ad4d22e15503dd2868705372270cf9f2da4f3afa6bd80fe",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011601525139291163,
+            "rank_icir": 0.15150098618656985,
+            "sharpe": 2.229894758218032,
+            "max_drawdown": 0.12849920647832908,
+            "turnover": 0.04837233463702233,
+            "worst_block_sharpe": 1.4894837559870657
+          },
+          "raw_rank_ic_fold_gain": 0.009168883624775389,
+          "status": "train_evaluated",
+          "train_gain": 0.1969564892146704
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "a1f8c792641655464bbe3025c1ef95e007b11ac0c9642d12d13a70fc2d829486",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.011601525139291163,
+            "rank_icir": 0.15150098618656985,
+            "sharpe": 2.229894758218032,
+            "max_drawdown": 0.12849920647832908,
+            "turnover": 0.04837233463702233,
+            "worst_block_sharpe": 1.4894837559870657
+          },
+          "raw_rank_ic_fold_gain": 0.009168883624775389,
+          "status": "train_evaluated",
+          "train_gain": 0.1969564892146704
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "8ef769e527770640028bc56c01240b051e151c7f6d56b08000a65f776b19dd37",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.010870570672037429,
+            "rank_icir": 0.14120027484836103,
+            "sharpe": 2.2181929973178263,
+            "max_drawdown": 0.1284992064783292,
+            "turnover": 0.04823071701002119,
+            "worst_block_sharpe": 1.4488242276415406
+          },
+          "raw_rank_ic_fold_gain": 0.008289713531935937,
+          "status": "train_evaluated",
+          "train_gain": 0.18902664180918355
+        },
+        {
+          "family": "INVERTED_U_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "c77f75fb2d0a6abb17d61f72bedb7e487babaf829cd734b4ee94d720dded2c74",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.010870570672037429,
+            "rank_icir": 0.14120027484836103,
+            "sharpe": 2.2181929973178263,
+            "max_drawdown": 0.1284992064783292,
+            "turnover": 0.04823071701002119,
+            "worst_block_sharpe": 1.4488242276415406
+          },
+          "raw_rank_ic_fold_gain": 0.008289713531935937,
+          "status": "train_evaluated",
+          "train_gain": 0.18902664180918355
+        },
+        {
+          "family": "LOW_DOF_INTERACTION",
+          "parameters": {
+            "interaction_degree": 1,
+            "doe_reduction": 0.7
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: LOW_DOF_INTERACTION requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "flag",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "missing_indicator",
+          "plan_identity": "cc200d8f5091dbfdf46a0f8358e14be5ea35da80f3cc6f8ac5b50221e1a953b6",
+          "coverage": 0.0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 1
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "forward_fill",
+          "plan_identity": "e5ff2e302f6505356e26d7b4bbe6e996cc09c2f053dab9897cbf58bd4423edb0",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 3
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "forward_fill",
+          "plan_identity": "ef9c4a9f8496b5e0e188dcdecd72c5141312fd68b52053e1f359d6a0b10ff7ff",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "MISSINGNESS_FRESHNESS",
+          "parameters": {
+            "mode": "fill",
+            "freshness_window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "forward_fill",
+          "plan_identity": "c7ca47f30539b4d3910edacb0d9190fba3441113936c4cc0b59d3b7aa2429aba",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "OPERATOR_SWAP",
+          "parameters": {
+            "target_family": "delay",
+            "aggressiveness": "conservative"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: OPERATOR_SWAP requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "6e78450fc10e8f93074b76288e6f37874c16da32370e5a82049997a514696622",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0009705289402057907,
+            "rank_icir": 0.013969930943849981,
+            "sharpe": 2.120185912756197,
+            "max_drawdown": 0.10160325811133651,
+            "turnover": 0.38569151328146933,
+            "worst_block_sharpe": 1.7878807413960414
+          },
+          "raw_rank_ic_fold_gain": -0.004524005353524904,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "1808974b3d7061fce53a5d06e06b4fa232b0497fab46ea5a631cb204f7bfd2f1",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.001773366364502074,
+            "rank_icir": 0.025880364404900286,
+            "sharpe": 1.5367101060349717,
+            "max_drawdown": 0.12204349075473873,
+            "turnover": 0.33535820229191976,
+            "worst_block_sharpe": 1.0946743543051325
+          },
+          "raw_rank_ic_fold_gain": -0.003082980678438512,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "average",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "6a1307737b731fd29c87a3577166c66e5fbc7a827e788ec274352cc506152532",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003515428643658705,
+            "rank_icir": 0.05377453655597026,
+            "sharpe": 1.4539130388977761,
+            "max_drawdown": 0.12865886555315045,
+            "turnover": 0.31619260031158997,
+            "worst_block_sharpe": 0.8457558412787907
+          },
+          "raw_rank_ic_fold_gain": 0.0015651714446776304,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "4c662aa0d25cff95af966a23c4bc7ae43479a3cf4d7575732f1fbe75fa8db8ab",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0026181202644467985,
+            "rank_icir": 0.037703547180542876,
+            "sharpe": 2.1087475479266726,
+            "max_drawdown": 0.07171720225521845,
+            "turnover": 0.3658482579130275,
+            "worst_block_sharpe": 1.7382076031596512
+          },
+          "raw_rank_ic_fold_gain": -0.004398869209873477,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "a4dc01d01289eb48473e7755413ba8ccd7ff76e4d103fa6163117b8f0091f596",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0045813170133539955,
+            "rank_icir": 0.0664959711589516,
+            "sharpe": 1.7623017755728765,
+            "max_drawdown": 0.08839091461568413,
+            "turnover": 0.35195695476099265,
+            "worst_block_sharpe": 1.1076740576229647
+          },
+          "raw_rank_ic_fold_gain": -0.0009586433257352013,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_RANK",
+          "parameters": {
+            "rank_axis": "ts",
+            "tie_method": "min",
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_rank_history",
+          "plan_identity": "f55ca5f2ff385506c5803bd1fb80bb853d1632a5f5c209e7262add4c398f78c1",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003607839078758713,
+            "rank_icir": 0.05503087122445959,
+            "sharpe": 1.6259787253527371,
+            "max_drawdown": 0.07749342244691773,
+            "turnover": 0.3038675243074623,
+            "worst_block_sharpe": 0.4773766525369908
+          },
+          "raw_rank_ic_fold_gain": 0.0030959479377874223,
+          "status": "train_evaluated",
+          "train_gain": 0.04179193306824508
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "cross_sectional",
+            "cap": 3.0,
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "capped_zscore",
+          "plan_identity": "c8b9271058c6354ee825cef91649dc544150b0b706d878c648263317df989e83",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0037147588599067316,
+            "rank_icir": -0.056438955488676903,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -3.533080004504122e-05,
+          "status": "train_evaluated",
+          "train_gain": -0.0001536164331325529
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "1a0022281627a340921679024f8f7f8591b3c6c8ee8299f9ceda00bef78a639f",
+          "coverage": 0.976781952247191,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.004194388002323616,
+            "rank_icir": -0.06533515987229295,
+            "sharpe": 1.865377828968322,
+            "max_drawdown": 0.1650058738743974,
+            "turnover": 0.08308615857050858,
+            "worst_block_sharpe": 0.8696919040762985
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0002254348058586046,
+            "rank_icir": -0.003422456564867183,
+            "sharpe": 1.531217194224925,
+            "max_drawdown": 0.16036721288075484,
+            "turnover": 0.37630094053213686,
+            "worst_block_sharpe": 0.8206465897064578
+          },
+          "raw_rank_ic_fold_gain": -0.007817661312030558,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "7698732e3fbbf25f568091d7fba37d55152ab394d48614c6f9b4880760962d62",
+          "coverage": 0.9903587312734082,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0038134847788995666,
+            "rank_icir": -0.05856554647122214,
+            "sharpe": 1.7986946509485195,
+            "max_drawdown": 0.16423729713205934,
+            "turnover": 0.06187840291350944,
+            "worst_block_sharpe": 0.7037733821127802
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 4.982227011111443e-05,
+            "rank_icir": 0.0007036427256036516,
+            "sharpe": 1.0812306417102149,
+            "max_drawdown": 0.18076148310402843,
+            "turnover": 0.36902837394443405,
+            "worst_block_sharpe": 0.2750485770784173
+          },
+          "raw_rank_ic_fold_gain": -0.004748355716723144,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "REPRESENTATION_ZSCORE",
+          "parameters": {
+            "zscore_axis": "ts",
+            "cap": 3.0,
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ts_zscore_history",
+          "plan_identity": "2febcfe91798aa91d001a659d4d49111ada4e53949110d59d309fba1f6b07f2d",
+          "coverage": 0.9981566011235955,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.003321394897815552,
+            "rank_icir": -0.050594017455793165,
+            "sharpe": 1.8127825593870641,
+            "max_drawdown": 0.16271618526370543,
+            "turnover": 0.058445584095722376,
+            "worst_block_sharpe": 0.6745946926797111
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.004959395937678248,
+            "rank_icir": 0.07186285066667462,
+            "sharpe": 1.0772140068442766,
+            "max_drawdown": 0.12491917750853129,
+            "turnover": 0.3700938690546882,
+            "worst_block_sharpe": 0.7644256432892667
+          },
+          "raw_rank_ic_fold_gain": 0.0029180601228745813,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "ROBUST_OUTLIER",
+          "parameters": {
+            "lower_quantile": 0.01,
+            "upper_quantile": 0.99
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "cs_winsor",
+          "plan_identity": "07146affe5dcf25c80e52192f431ea0662caca911d56ce39165dc574157b4161",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "mad",
+            "center": "median"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "0b5d40668ffc17e7b61898a8ca9d94dd8cfda695518e2fe1ceb949161ca4a888",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "mad",
+            "center": "mean"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "a07813b4b8ae6108b1d3cde95b4cea72da49dfab414aa24be8bd59912e8ce397",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "iqr",
+            "center": "median"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "50a45a39e54739797d5039f675ebfd91560074e7c41b0f6b1993265bbbd66a0c",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "iqr",
+            "center": "mean"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "cdd2f4bf3083249f3a487ad0e535cbfd15996e0bd284651b12772ef42b17fecb",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "std",
+            "center": "median"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "c4969944dafc02a7bc799082bd4290cc73de6b5cbb989271261a535701af51e8",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "ROBUST_SCALE",
+          "parameters": {
+            "scale": "std",
+            "center": "mean"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "robust_scale",
+          "plan_identity": "d3580916f9acd1992f95ed6b68d8b5ccc85354ee454a55e28d9acbed4213c49d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "SIGN_ORIENTATION",
+          "parameters": {
+            "direction": "flip"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "sign",
+          "plan_identity": "ff5c0a2213c476a5102a316c7c37100a0e18d779959423b74391d2be9784273d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003706877545630786,
+            "rank_icir": 0.05631919210281105,
+            "sharpe": 2.1876799244385023,
+            "max_drawdown": 0.1372842611595034,
+            "turnover": 0.031112155881990174,
+            "worst_block_sharpe": 1.2564050352713265
+          },
+          "raw_rank_ic_fold_gain": 0.003850095940020812,
+          "status": "train_evaluated",
+          "train_gain": 0.1265076796893742
+        },
+        {
+          "family": "SIZE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "size",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: SIZE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "STYLE_NEUTRALIZATION",
+          "parameters": {
+            "exposure_set": "style_multi",
+            "method": "ols"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: STYLE_NEUTRALIZATION requires an external exposure panel"
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "top",
+            "hinge_value": 0.0
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "tail_hinge",
+          "plan_identity": "1543bb37f6060c8a2e4d9a783d912d20d9e2d267478cdd7c48d8ee58a4e5ed55",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003706877545630786,
+            "rank_icir": -0.05631919210281105,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -1.3974254826867678e-05,
+          "status": "train_evaluated",
+          "train_gain": -8.280085394535286e-05
+        },
+        {
+          "family": "TAIL_HINGE",
+          "parameters": {
+            "hinge": "bottom",
+            "hinge_value": 0.0
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "tail_hinge",
+          "plan_identity": "b926190bb9a304f622cfa38f880da4485b1c9dfc6000be7e4c1cd7e15bad1551",
+          "coverage": 0.0,
+          "valid_train_days": 0,
+          "status": "ineligible",
+          "reason": "ValueError: insufficient common coverage or training IC"
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "top"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "tail_saturation",
+          "plan_identity": "20a0800c891e467e174b1ec85d7fa418dfca2b38555aab50549f5e8e958b67c0",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0037209621282919703,
+            "rank_icir": -0.05647529136345622,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "raw_rank_ic_fold_gain": -3.8601372091386896e-05,
+          "status": "train_evaluated",
+          "train_gain": -0.00018647432895901872
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "bottom"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "tail_saturation",
+          "plan_identity": "63d24c286887456d0e9fc817642efd1527e26ef6a5d1c227ee39eaee85729bde",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.004119362084292521,
+            "rank_icir": -0.06263640261718888,
+            "sharpe": 1.5977536866244908,
+            "max_drawdown": 0.16326961800213421,
+            "turnover": 0.08645042643362519,
+            "worst_block_sharpe": 0.6680254343765691
+          },
+          "raw_rank_ic_fold_gain": -0.0012019035232789313,
+          "status": "train_evaluated",
+          "train_gain": -0.025677967129921903
+        },
+        {
+          "family": "TAIL_SATURATION",
+          "parameters": {
+            "saturation_quantile": 0.97,
+            "saturate": "both"
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "tail_saturation",
+          "plan_identity": "e2e6e7042493ab241ca32fe5ecad8b43aff011ae0420f2fe9915779a01dcb037",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.00413354196664443,
+            "rank_icir": -0.0627911450653304,
+            "sharpe": 1.5977536866244908,
+            "max_drawdown": 0.16326961800213421,
+            "turnover": 0.08645042643362519,
+            "worst_block_sharpe": 0.6680254343765691
+          },
+          "raw_rank_ic_fold_gain": -0.001196988748111293,
+          "status": "train_evaluated",
+          "train_gain": -0.025781151681726955
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "32b88e1f3824d6fa4531d3de730e8bfae8a13d487f38aaa1696f4694a5b6a640",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "c9dfe3fe755d228a261bd4028b4a98a2d917ce682b48c3ea80ee1b1dfd290ee0",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "9fd04a89033522b6a2b982ddc511f027ff3d9c7c92549f10d6cd45824c3fe815",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "566f59a8084eacea6884e250f14e5df39563456c32a655fe51ac9a2b9f5a93be",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "02d40a56c1bf3fd4b74c74639336b5cbfc1a9153b58f0b45cb232d820cd556bb",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.01029763628597614,
+            "rank_icir": -0.13340336484843202,
+            "sharpe": -0.14674852802287053,
+            "max_drawdown": 0.05712255701055684,
+            "turnover": 0.08018287414128317,
+            "worst_block_sharpe": -1.4058757831656887
+          },
+          "raw_rank_ic_fold_gain": -0.011219974788659586,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2.0,
+            "asymmetry": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "04350b47c1c0eb9167ed1efab1987713201ce87198704fe877a0e16e56b30131",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.01029763628597614,
+            "rank_icir": -0.13340336484843202,
+            "sharpe": -0.14674852802287053,
+            "max_drawdown": 0.05712255701055684,
+            "turnover": 0.08018287414128317,
+            "worst_block_sharpe": -1.4058757831656887
+          },
+          "raw_rank_ic_fold_gain": -0.011219974788659586,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "1e9b01dee571fdae279964ad710ac0a3e65e378be520d446eb469fa9a9c1222c",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.35,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "6441f556c52e0239552057da6db275948203dd4d50c9c5a6b133c6ce87f0768b",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "3813d33589a8102a6707eca4ed60b4fa61b3c0c1bda7436d0c44641573da7662",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.5,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "f89b98ddcbd0a5162f8b5c8ed7f1fc9bed652f0070e2ca2c3efd8a2674c88492",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 1.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "69c194efbd19c47fa127004fc8f720515740971879aeb6a61bd60e0248e89384",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "U_SHAPE_REPAIR",
+          "parameters": {
+            "center": 0.65,
+            "power": 2.0,
+            "asymmetry": true
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "rank_shape",
+          "plan_identity": "9756d0517814c1c6738cb8e53d38d0723e2341aa0a72066ff35ca01f3ed757dd",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "status": "ineligible",
+          "reason": "JointMetricsUnavailable: joint metrics unavailable, including zero-variance ratios"
+        },
+        {
+          "family": "WINDOW_REFINEMENT",
+          "parameters": {
+            "window_mode": "shorter",
+            "scale": 0.7
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "status": "ineligible",
+          "reason": "IneligibleValueRepair: WINDOW_REFINEMENT requires FactorEngine DSL recompilation"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "c9b96f8bd865ae8d9df769fba71a9cf47a9c0ded2fbab9ff9f3ce797ab5befa3",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.007713048915387851,
+            "rank_icir": -0.11828156725906351,
+            "sharpe": -0.09270904804136175,
+            "max_drawdown": 0.17785817643516422,
+            "turnover": 0.7130820029491548,
+            "worst_block_sharpe": -0.5191346932143757
+          },
+          "raw_rank_ic_fold_gain": -0.006913599787591409,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 3,
+            "window": 3
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "d32ee8e060802c688e302e13e5229c6bf1570a333a7076bfc422b7a1c26ecfaf",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.007713048915387851,
+            "rank_icir": 0.11828156725906351,
+            "sharpe": 1.421437957659602,
+            "max_drawdown": 0.14997634685952463,
+            "turnover": 0.3658133821932347,
+            "worst_block_sharpe": 0.20002802368887873
+          },
+          "raw_rank_ic_fold_gain": 0.006149281422142457,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "58d33698b8647cc4929ec286ee2a3413d2510b80d5443c32f5fd3512fedecd5c",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.006032463675404376,
+            "rank_icir": -0.09235716688157682,
+            "sharpe": 0.4552566311898724,
+            "max_drawdown": 0.18416898256592504,
+            "turnover": 0.44666377022841186,
+            "worst_block_sharpe": -0.3285342975124476
+          },
+          "raw_rank_ic_fold_gain": -0.006492346011764795,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 5,
+            "window": 5
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "c4d8d2d2a40ee96c6410275820f212425099bc5f6ea18c05eee0698c603ff57e",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.006032463675404376,
+            "rank_icir": 0.09235716688157682,
+            "sharpe": 1.5205256409347159,
+            "max_drawdown": 0.15660358985635225,
+            "turnover": 0.415467970752877,
+            "worst_block_sharpe": 0.6175583623948743
+          },
+          "raw_rank_ic_fold_gain": 0.003110233626316858,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "6caaae9ed89a36e8f725ad4713249d8c6c2d8124cf45369390307d9cc6b0c003",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003101237570138671,
+            "rank_icir": -0.047860655096178296,
+            "sharpe": 0.5021567558903774,
+            "max_drawdown": 0.15746922097534272,
+            "turnover": 0.4475676165020103,
+            "worst_block_sharpe": -0.33977797219232964
+          },
+          "raw_rank_ic_fold_gain": -0.0034769486816040884,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 8,
+            "window": 8
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "13823a9c6b9a555eea899b4ba781deb8a4cba0e801da8d45c3ee4413983fa10d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003101237570138671,
+            "rank_icir": 0.047860655096178296,
+            "sharpe": 0.6051950280014374,
+            "max_drawdown": 0.15917270868961964,
+            "turnover": 0.4418258692085664,
+            "worst_block_sharpe": -0.002383786678101347
+          },
+          "raw_rank_ic_fold_gain": 0.0014237877508875485,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "c9f499bf987146c59d14e7e1d6c9c7ff4ad5ee4eb8a4f52091b1f34ecec46f18",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -8.162067309094493e-05,
+            "rank_icir": -0.0012265396676785169,
+            "sharpe": 0.3040334104984884,
+            "max_drawdown": 0.1875175321431405,
+            "turnover": 0.36813330770477704,
+            "worst_block_sharpe": -0.27494340460910105
+          },
+          "raw_rank_ic_fold_gain": -0.00019913197962322798,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 10,
+            "window": 10
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "9668960e4f0bc6889c54714a2997e5470c2f73f8a7f1aca813fdf0fc4692f5b7",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 8.162067309094493e-05,
+            "rank_icir": 0.0012265396676785169,
+            "sharpe": 0.8778421716975922,
+            "max_drawdown": 0.15195638434796663,
+            "turnover": 0.3984324363563751,
+            "worst_block_sharpe": 0.03467276714859541
+          },
+          "raw_rank_ic_fold_gain": -0.00045551964378619074,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "b480e528930cb47eeddf10f97f80c441497d2f81bfed2f19534faa6b3b43d846",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.003436337929941345,
+            "rank_icir": -0.05084042002878592,
+            "sharpe": -0.12496739777736898,
+            "max_drawdown": 0.1883990898626936,
+            "turnover": 0.3220592462434981,
+            "worst_block_sharpe": -0.9669802291980607
+          },
+          "raw_rank_ic_fold_gain": -0.005577963305693177,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 13,
+            "window": 13
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "38f7d4c48a546ac7d3d47bd6dac4560a9fce615d6d2dd6effa55d849eeedaa3a",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.003436337929941345,
+            "rank_icir": 0.05084042002878592,
+            "sharpe": 0.504365281449737,
+            "max_drawdown": 0.1449983969966195,
+            "turnover": 0.3467720137831697,
+            "worst_block_sharpe": -0.15279258943242724
+          },
+          "raw_rank_ic_fold_gain": 0.000790846111758033,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "trailing_sma",
+          "plan_identity": "3723b935949cefc341d5772839cd230586f5a061cbed2ff7b46400be627c7cde",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.007471239328185023,
+            "rank_icir": -0.11989411517419611,
+            "sharpe": -1.2018875956082316,
+            "max_drawdown": 0.2004578532005971,
+            "turnover": 0.18690020582212047,
+            "worst_block_sharpe": -3.1752141619954135
+          },
+          "raw_rank_ic_fold_gain": -0.01056553638735278,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "min_periods": 20,
+            "window": 20
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "trailing_sma",
+          "plan_identity": "7aa5b7f5e286fd2c1a0f69ab2fa5c7a75e9707110533c5286671d3fecc9983ca",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.007471239328185023,
+            "rank_icir": 0.11989411517419611,
+            "sharpe": 0.7004168604011736,
+            "max_drawdown": 0.11780829372614841,
+            "turnover": 0.2180553692260449,
+            "worst_block_sharpe": -0.4129666131835032
+          },
+          "raw_rank_ic_fold_gain": 0.00538280637917713,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3.0,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "7d93dc5bd2e9f2572d8a466d13e68d42dba2ea388dc46458b111ba0bbcdce065",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005767880853411047,
+            "rank_icir": -0.08271175161057795,
+            "sharpe": -1.7723295755067867,
+            "max_drawdown": 0.08691033093602565,
+            "turnover": 0.050216355768881116,
+            "worst_block_sharpe": -3.440413568616592
+          },
+          "raw_rank_ic_fold_gain": -0.007615930417348931,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 3.0,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "70fc6ded93e0a51ca8bebe36bc379df52fab9bc5bfbcf218aaf434fa8b08ba75",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005767880853411047,
+            "rank_icir": 0.08271175161057795,
+            "sharpe": 1.0721652065874812,
+            "max_drawdown": 0.022451712221184937,
+            "turnover": 0.05014363114068578,
+            "worst_block_sharpe": -0.804670416905088
+          },
+          "raw_rank_ic_fold_gain": 0.003156909053363555,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10.0,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "a8f0ef160f6c7fb2e5513a4ad78afeb584252e860c15258a2b7da54b99d6a023",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0062777045712447506,
+            "rank_icir": -0.08952106811168334,
+            "sharpe": -1.2784248330127923,
+            "max_drawdown": 0.07124133148665714,
+            "turnover": 0.046143776589942176,
+            "worst_block_sharpe": -3.9008631425639906
+          },
+          "raw_rank_ic_fold_gain": -0.009760542943517667,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 10.0,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "0d310e02e1c925c5e012cd68df9f7e3d47d15c2871a5030a330b2cd1faa41848",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0062777045712447506,
+            "rank_icir": 0.08952106811168334,
+            "sharpe": 0.8718688733586519,
+            "max_drawdown": 0.024159128098761765,
+            "turnover": 0.046289225846332854,
+            "worst_block_sharpe": -0.9850301003507682
+          },
+          "raw_rank_ic_fold_gain": 0.0019728882872712544,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13.0,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "688cf2f4bdf35f6d7c58328c2fa283feff19669398c46201dde73370199fd3df",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.006643462172430349,
+            "rank_icir": -0.09484874044461807,
+            "sharpe": -1.3843362776528532,
+            "max_drawdown": 0.07024335345165801,
+            "turnover": 0.04396203774408202,
+            "worst_block_sharpe": -4.032082830333408
+          },
+          "raw_rank_ic_fold_gain": -0.009746982307662307,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 13.0,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "68546e912211f69c6e87afbcd6d57a92b403c458295e6b3ac68512059aab1607",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.006643462172430349,
+            "rank_icir": 0.09484874044461807,
+            "sharpe": 1.2622842875644404,
+            "max_drawdown": 0.025618991719794662,
+            "turnover": 0.0478341719278955,
+            "worst_block_sharpe": -0.8723710876063805
+          },
+          "raw_rank_ic_fold_gain": 0.0025061900196778064,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20.0,
+            "min_periods": 1
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "ewma",
+          "plan_identity": "141c308cffd7641a24489f3ca3ed52deb63894086bce7cba3d462d832887753e",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.007406268651827545,
+            "rank_icir": -0.10477573085672202,
+            "sharpe": -1.2154999285209858,
+            "max_drawdown": 0.08356602236312066,
+            "turnover": 0.041544046849412354,
+            "worst_block_sharpe": -3.808260562685294
+          },
+          "raw_rank_ic_fold_gain": -0.009729671326687853,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "halflife": 20.0,
+            "min_periods": 1
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "ewma",
+          "plan_identity": "dca8bcf492776c309bcc6dfc118e0551c57d14651365df2ead96986806d27516",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.007406268651827545,
+            "rank_icir": 0.10477573085672202,
+            "sharpe": 2.542302412207588,
+            "max_drawdown": 0.023660842713411956,
+            "turnover": 0.044992504387561444,
+            "worst_block_sharpe": -0.2882911071636612
+          },
+          "raw_rank_ic_fold_gain": 0.00379201228358797,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "1aae9561d48735721872c83ecc11cac59c70a4ef16d45be3f2c7bf3d28acf8da",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005767880853411047,
+            "rank_icir": -0.08271175161057795,
+            "sharpe": -1.7723295755067867,
+            "max_drawdown": 0.08691033093602565,
+            "turnover": 0.050216355768881116,
+            "worst_block_sharpe": -3.440413568616592
+          },
+          "raw_rank_ic_fold_gain": -0.007615930417348931,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.20629947401590026
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "abce813b0fe43e2058fae4b2b6abed5a032364cfbbd9e9a298a4cba7619b0692",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005767880853411047,
+            "rank_icir": 0.08271175161057795,
+            "sharpe": 1.0721652065874812,
+            "max_drawdown": 0.022451712221184937,
+            "turnover": 0.05014363114068578,
+            "worst_block_sharpe": -0.804670416905088
+          },
+          "raw_rank_ic_fold_gain": 0.003156909053363555,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "5211eab55d3f05895c2ae6f0b7a32683c5e13278cae275620acd42488611b476",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005339490448603777,
+            "rank_icir": -0.07570338151060946,
+            "sharpe": -1.6454482028748565,
+            "max_drawdown": 0.08033607984750514,
+            "turnover": 0.04890731246136503,
+            "worst_block_sharpe": -3.7892834685582684
+          },
+          "raw_rank_ic_fold_gain": -0.008226581805786264,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.12944943670387585
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "019f88c228110253bf95f634ac2f8bbf44ef83515c86eef3b097bb94be03c75a",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005339490448603777,
+            "rank_icir": 0.07570338151060946,
+            "sharpe": 1.1170497687071281,
+            "max_drawdown": 0.024598706727342858,
+            "turnover": 0.04883458783316969,
+            "worst_block_sharpe": -0.8143644094719301
+          },
+          "raw_rank_ic_fold_gain": 0.00183299651564114,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "6c6d09237814bd98eeec91b9119e10f7eab474882220490a9d61d985cd82f693",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0057468998183544395,
+            "rank_icir": -0.08201262868500518,
+            "sharpe": -1.4027703250059929,
+            "max_drawdown": 0.07649748966223721,
+            "turnover": 0.04672557361550488,
+            "worst_block_sharpe": -3.863834396803704
+          },
+          "raw_rank_ic_fold_gain": -0.008912391191682387,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.08299595679532877
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "76faf3aeb2ef848e00184163375d5275e76db8b14bb3650089e3edf66b53d879",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0057468998183544395,
+            "rank_icir": 0.08201262868500518,
+            "sharpe": 1.2397140220024812,
+            "max_drawdown": 0.022308448630458104,
+            "turnover": 0.046289225846332854,
+            "worst_block_sharpe": -0.7431992060954875
+          },
+          "raw_rank_ic_fold_gain": 0.0016636674017901478,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "24708609a767f00b53feb3c4e5ba7759e8476253f3c8dd9ac5ee50466684b75b",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0062777045712447506,
+            "rank_icir": -0.08952106811168334,
+            "sharpe": -1.2784248330127923,
+            "max_drawdown": 0.07124133148665714,
+            "turnover": 0.046143776589942176,
+            "worst_block_sharpe": -3.9008631425639906
+          },
+          "raw_rank_ic_fold_gain": -0.009760542943517667,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.06696700846319258
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "cce191624bebeec1376f520c2c5fff9c51613308b08a1dde2a9226f9ef76cdcf",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0062777045712447506,
+            "rank_icir": 0.08952106811168334,
+            "sharpe": 0.8718688733586519,
+            "max_drawdown": 0.024159128098761765,
+            "turnover": 0.046289225846332854,
+            "worst_block_sharpe": -0.9850301003507682
+          },
+          "raw_rank_ic_fold_gain": 0.0019728882872712544,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "fb09c921ca17de8c963c2c311e297b1a8e94cf6f96874298cc9d30dd8ebfadf8",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.006643462172430349,
+            "rank_icir": -0.09484874044461807,
+            "sharpe": -1.3843362776528532,
+            "max_drawdown": 0.07024335345165801,
+            "turnover": 0.04396203774408202,
+            "worst_block_sharpe": -4.032082830333408
+          },
+          "raw_rank_ic_fold_gain": -0.009746982307662307,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "alpha": 0.051922485660828535
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "one_sided_iir_lowpass",
+          "plan_identity": "d9ddc27062c938eae01c06b02ebc4e1599a088b9265945a7c24017971c4cf52a",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.006643462172430349,
+            "rank_icir": 0.09484874044461807,
+            "sharpe": 1.2622842875644404,
+            "max_drawdown": 0.025618991719794662,
+            "turnover": 0.0478341719278955,
+            "worst_block_sharpe": -0.8723710876063805
+          },
+          "raw_rank_ic_fold_gain": 0.0025061900196778064,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kama",
+          "plan_identity": "defef3fdd162299a8880121e62e2fc0f251cbe3dcf838acfc5d43437233fe999",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.002454122728547114,
+            "rank_icir": -0.035634699779650524,
+            "sharpe": -0.9097986631807137,
+            "max_drawdown": 0.05875438723932794,
+            "turnover": 0.06076142685720518,
+            "worst_block_sharpe": -2.0523641292249963
+          },
+          "raw_rank_ic_fold_gain": -0.005468806285989984,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 8,
+            "period_fast": 2,
+            "period_slow": 24,
+            "use_current": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kama",
+          "plan_identity": "5b7698a0e623687513f0badeda172639df74b2cbacaa94ddde7bf1fd4e066a6d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.002454122728547114,
+            "rank_icir": 0.035634699779650524,
+            "sharpe": 0.7173378759083023,
+            "max_drawdown": 0.027417100295170357,
+            "turnover": 0.06828933041059926,
+            "worst_block_sharpe": -1.5685303936883142
+          },
+          "raw_rank_ic_fold_gain": -0.0026706080995041763,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kama",
+          "plan_identity": "5a3ae19e80a5f7e1b7dc41e714cb7d10eda23cabf3a0769f5be40d79d1142c05",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0016563240244883452,
+            "rank_icir": -0.023715179822438866,
+            "sharpe": -1.1824793135018956,
+            "max_drawdown": 0.06581331509653571,
+            "turnover": 0.06834480828712879,
+            "worst_block_sharpe": -2.3943206730919133
+          },
+          "raw_rank_ic_fold_gain": -0.0024960735377278103,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 10,
+            "period_fast": 2,
+            "period_slow": 30,
+            "use_current": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kama",
+          "plan_identity": "29926709f6c264a0c72baca666641a0827e808f58b8ee0d615de82360a25441d",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0016563240244883452,
+            "rank_icir": 0.023715179822438866,
+            "sharpe": 0.934363992367691,
+            "max_drawdown": 0.05138516544144297,
+            "turnover": 0.07395583861050452,
+            "worst_block_sharpe": -1.0684323529630277
+          },
+          "raw_rank_ic_fold_gain": 0.0010452018331919824,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kama",
+          "plan_identity": "15b1e808c8106d0c9a9f1ed385ba69ada65978e020ccf5eac141fbb15d3ba06f",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.001129016266362219,
+            "rank_icir": 0.016885472767988984,
+            "sharpe": -1.0420294175193516,
+            "max_drawdown": 0.06124103774744673,
+            "turnover": 0.07407003381695208,
+            "worst_block_sharpe": -2.1557415173825025
+          },
+          "raw_rank_ic_fold_gain": 0.00028937094417285595,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 13,
+            "period_fast": 2,
+            "period_slow": 39,
+            "use_current": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kama",
+          "plan_identity": "9aaa5d97a04d6bec63705a5a5a3b61090f4db836cd7778119adb734364d37d93",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.001129016266362219,
+            "rank_icir": -0.016885472767988984,
+            "sharpe": 0.017245346781618445,
+            "max_drawdown": 0.029186247354093135,
+            "turnover": 0.07436093232973345,
+            "worst_block_sharpe": -2.2074266339456936
+          },
+          "raw_rank_ic_fold_gain": -0.0029378493940522654,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kama",
+          "plan_identity": "80bafe5622a8d092b4dbb29c8310995b2b9d7518df0b099233c1975576e2e2e4",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005855669747630218,
+            "rank_icir": -0.08640371839250148,
+            "sharpe": -1.829055631884561,
+            "max_drawdown": 0.0855240554953398,
+            "turnover": 0.08163339514926726,
+            "worst_block_sharpe": -4.007445246780643
+          },
+          "raw_rank_ic_fold_gain": -0.007813698457849938,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "period_er": 20,
+            "period_fast": 2,
+            "period_slow": 60,
+            "use_current": false
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kama",
+          "plan_identity": "a4f21d36cb7d847a9bb12fc434382cd6f7be092f2ac88326afda5329e8ab2eb4",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005855669747630218,
+            "rank_icir": 0.08640371839250148,
+            "sharpe": 0.847829217210314,
+            "max_drawdown": 0.017319202130999304,
+            "turnover": 0.08933284806038366,
+            "worst_block_sharpe": -1.0374532636822738
+          },
+          "raw_rank_ic_fold_gain": 0.0024285784029457764,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "d492e3ae805820ae0bb533ba25839b29e6ba88da66dcca8fc45dd271b3531dc3",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005752115508625504,
+            "rank_icir": -0.0824427753484652,
+            "sharpe": -1.7723295755067867,
+            "max_drawdown": 0.08691033093602565,
+            "turnover": 0.050216355768881116,
+            "worst_block_sharpe": -3.440413568616592
+          },
+          "raw_rank_ic_fold_gain": -0.0075807864876648295,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.053621575878972906
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "0b0b5df0fc42ab9183c8f01b15433cbaf0b25765aeacf1fa6afa09db44c5e867",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005752115508625504,
+            "rank_icir": 0.0824427753484652,
+            "sharpe": 1.0721652065874812,
+            "max_drawdown": 0.022451712221184937,
+            "turnover": 0.05014363114068578,
+            "worst_block_sharpe": -0.804670416905088
+          },
+          "raw_rank_ic_fold_gain": 0.0031645362523553735,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "748db2818b03c2faed90787cd8c08cf9e35b98fe364db627dad9ad5dc1b76de7",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.0053740745022057175,
+            "rank_icir": -0.07619705401133829,
+            "sharpe": -1.6735694837634776,
+            "max_drawdown": 0.08053253348993059,
+            "turnover": 0.04883458783316969,
+            "worst_block_sharpe": -3.7892834685582684
+          },
+          "raw_rank_ic_fold_gain": -0.008254742587267709,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.019248918293159143
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "2476eb2f3b2511c8843e6fe994fd3c4125d0db02b2a357d3be2d41094c8c5727",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.0053740745022057175,
+            "rank_icir": 0.07619705401133829,
+            "sharpe": 1.130451389002501,
+            "max_drawdown": 0.024598706727342042,
+            "turnover": 0.04876186320497435,
+            "worst_block_sharpe": -0.8143644094719301
+          },
+          "raw_rank_ic_fold_gain": 0.0018835183177038318,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "50d50b3031cf2a96f186edcac4f92ba5c47346720774bb8490b48e2380d30f79",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.005787718972892994,
+            "rank_icir": -0.08273672344588213,
+            "sharpe": -1.5119198786115566,
+            "max_drawdown": 0.08134375368363758,
+            "turnover": 0.04687102287189556,
+            "worst_block_sharpe": -3.863834396803704
+          },
+          "raw_rank_ic_fold_gain": -0.00888246343448974,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.007511775869928892
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "232471ab536c35601793f1725468afb55654bdb25d5ef22aa6a6b571d4bbcd6b",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.005787718972892994,
+            "rank_icir": 0.08273672344588213,
+            "sharpe": 1.2500209999733363,
+            "max_drawdown": 0.022308448630457535,
+            "turnover": 0.046289225846332854,
+            "worst_block_sharpe": -0.7431992060954875
+          },
+          "raw_rank_ic_fold_gain": 0.001761052682225951,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "d941b8ee0ecc632664a82e742f32262052e580cf8e6e0eba2c79bb0e88206ce8",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.00652864739981474,
+            "rank_icir": -0.09325901732984623,
+            "sharpe": -1.4460198686357615,
+            "max_drawdown": 0.07645743473230492,
+            "turnover": 0.04621650121813751,
+            "worst_block_sharpe": -4.200388830609756
+          },
+          "raw_rank_ic_fold_gain": -0.00970243026727326,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.004806454073100579
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "e015d80f74cbabe33cf0e033845332a23da6c07b80a3395712f9589c0f0b3495",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.00652864739981474,
+            "rank_icir": 0.09325901732984623,
+            "sharpe": 1.0992690198457493,
+            "max_drawdown": 0.02415912809876132,
+            "turnover": 0.04665284898730954,
+            "worst_block_sharpe": -0.9850301003507682
+          },
+          "raw_rank_ic_fold_gain": 0.002422926386278855,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "fe204b35df79b32a0f8633e5a52e129b69e10cd0a2d68b2477a95868e537b0d6",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.006846052076439029,
+            "rank_icir": -0.0977348534045623,
+            "sharpe": -1.2249396394366587,
+            "max_drawdown": 0.07276243468888464,
+            "turnover": 0.04522061906468706,
+            "worst_block_sharpe": -4.260353226589199
+          },
+          "raw_rank_ic_fold_gain": -0.00980869720459833,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.0028435908208181383
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "4883c1eafd777bacfc842abb07f5a0262857eb41497f06ceb30c510e8707fe10",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.006846052076439029,
+            "rank_icir": 0.0977348534045623,
+            "sharpe": 1.4528364071934325,
+            "max_drawdown": 0.025618991719794492,
+            "turnover": 0.048561577159277995,
+            "worst_block_sharpe": -0.8723710876063805
+          },
+          "raw_rank_ic_fold_gain": 0.002774332447130513,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": 1,
+          "diagnosed_issues": [],
+          "transform": "kalman_local_level",
+          "plan_identity": "651ed78aca09504e07948af21d1799de640d4129218ae119a01e0201893c2725",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": -0.008091737929535188,
+            "rank_icir": -0.11329393556987868,
+            "sharpe": -1.0883393910513672,
+            "max_drawdown": 0.0813329668548105,
+            "turnover": 0.03982764349540316,
+            "worst_block_sharpe": -3.8457707291844705
+          },
+          "raw_rank_ic_fold_gain": -0.00986573484784767,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        },
+        {
+          "family": "CAUSAL_SMOOTHING",
+          "parameters": {
+            "measurement_noise": 1.0,
+            "process_noise": 0.0012012527662230554
+          },
+          "orientation": -1,
+          "diagnosed_issues": [
+            "negative_rank_ic"
+          ],
+          "transform": "kalman_local_level",
+          "plan_identity": "5c78208a7c45ca32bae6633b75aab1ca8d9f2a92f8124264f5e7be11ce5ec1db",
+          "coverage": 1.0,
+          "valid_train_days": 267,
+          "train_raw_metrics": {
+            "rank_ic": -0.0036978994219487417,
+            "rank_icir": -0.05617737834536126,
+            "sharpe": 1.80241977526469,
+            "max_drawdown": 0.1638542245618701,
+            "turnover": 0.056956044411153275,
+            "worst_block_sharpe": 0.6636481299873691
+          },
+          "train_candidate_metrics": {
+            "rank_ic": 0.008091737929535188,
+            "rank_icir": 0.11329393556987868,
+            "sharpe": 1.4956074745839485,
+            "max_drawdown": 0.07480487281097568,
+            "turnover": 0.050435397660182756,
+            "worst_block_sharpe": -0.3389110128781375
+          },
+          "raw_rank_ic_fold_gain": 0.0047151861601022055,
+          "status": "ineligible",
+          "reason": "ValueError: joint raw-relative degradation floor failed"
+        }
+      ]
+    }
+  }
+}
