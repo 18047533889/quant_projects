@@ -169,7 +169,7 @@ def test_auto_oracle_checker_rejects_mask_sign_and_count_mismatches(
                        oracle=lambda **kwargs: expected)
 
 
-@pytest.mark.parametrize("cache_status", ["cache_hit", "cache_miss"])
+@pytest.mark.parametrize("cache_status", ["cache_hit", "cache_miss", "producer_fail"])
 def test_live_driver_verifies_sixth_default_auto_without_supplied_records(
     monkeypatch, tmp_path, profile_sample, cache_status,
 ):
@@ -215,6 +215,25 @@ def test_live_driver_verifies_sixth_default_auto_without_supplied_records(
     reports = []
     monkeypatch.setattr(driver, "_dump", lambda body, path=None: reports.append(body))
     argv = ["--run", "--axis-index", str(tmp_path / "axes"), "--output", str(tmp_path / "report")]
+    if cache_status == "producer_fail":
+        original = tmp_path / "report"
+        original.write_text("previous verified report", encoding="utf-8")
+        def fail(**kwargs):
+            kwargs["progress_observer"]({"phase": "run_validated", "run_index": 0,
+                                         "backend_used": "cpu", "seconds": 1.0})
+            raise ValueError("do not expose private source locator")
+        monkeypatch.setattr(driver, "produce_source_route_profile_abba", fail)
+        with pytest.raises(ValueError, match="private source locator"):
+            driver.main(argv)
+        assert original.read_text() == "previous verified report"
+        diagnostic = json.loads((tmp_path / "report.progress.json").read_text())
+        assert diagnostic["status"] == "failed"
+        assert diagnostic["error_type"] == "ValueError"
+        assert len(diagnostic["validated_runs"]) == 1
+        assert "private source locator" not in json.dumps(diagnostic)
+        assert "profile_records" not in diagnostic
+        assert calls == [] and reports == [] and closes == [True]
+        return
     if cache_status == "cache_miss":
         with pytest.raises(ValueError, match="default auto did not reuse"):
             driver.main(argv)
@@ -228,3 +247,50 @@ def test_live_driver_verifies_sixth_default_auto_without_supplied_records(
     assert closes == [True]
     assert calls[0]["source_qualification"] == records
     assert "source_qualification" not in calls[1]
+
+
+def test_partial_progress_is_bounded_diagnostic_not_a_qualification(tmp_path):
+    from quant_evaluator.scripts.source_profile_report_reader import load_source_profile_report
+    path = tmp_path / "partial.json"
+    events = [{"run_index": 0, "backend_used": "cpu", "seconds": 2.0}]
+    driver._save_progress({"kind": "real_cos_profile_abba_f48_pearson.v2"}, path, events,
+                          status="failed", error_type="ValueError")
+    body = json.loads(path.read_text())
+    assert body["status"] == "failed"
+    assert body["qualification_available"] is False
+    assert body["validated_runs"] == events
+    assert "profile_records" not in body
+    with pytest.raises(ValueError):
+        load_source_profile_report(path)
+
+
+@pytest.mark.parametrize("events", [[{"seconds": float("nan")}], [{"extra": "x" * 1024**2}]])
+def test_progress_rejects_nonfinite_or_oversized_reports_before_writing(tmp_path, events):
+    path = tmp_path / "partial.json"
+    with pytest.raises(ValueError):
+        driver._save_progress({}, path, events)
+    assert not path.exists()
+
+
+def test_live_observer_accepts_real_typed_source_and_keyword_contract(monkeypatch):
+    from quant_evaluator.scripts import source_profile_abba as profiles
+    source = driver._WarmSource()
+    times = tuple(source.time_axis.values)
+    labels = driver.LabelBundle("observer-contract", np.zeros((24, 32)), 1,
+        decision_time=times, observation_time=times, signal_available_time=times,
+        execution_time=times, label_start_time=times,
+        label_end_time=tuple(source.time_axis.values + np.timedelta64(1, "D")),
+        asset_axis=source.asset_axis)
+    captured = []
+    token = object()
+    monkeypatch.setattr(profiles.source_profile_router, "capture_source_route_profile_context",
+                        lambda **kwargs: captured.append(kwargs) or token)
+    policy = driver.GPUExecutionPolicy()
+    assert profiles.live_source_profile_context_observer(
+        phase="before", source=source, labels=labels, metrics=driver.METRICS,
+        requested_tile_size=16, policy=policy) is token
+    assert captured[0]["source"] is source
+    assert captured[0]["metadata"].factor_ids == source.factor_ids
+    assert captured[0]["requested_tile_size"] == 16
+    assert captured[0]["policy"] is policy
+    assert len(captured[0]["request_fingerprint"]) == 64

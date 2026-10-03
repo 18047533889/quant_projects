@@ -112,6 +112,9 @@ def _cpu_source_batch(source, metadata, label, metrics, policy, max_tile_size):
                 out.observation_counts[metric][start + index] = observations
         count += 1
     out.metadata = {
+        # CPU tiles do not retry allocation failures: MemoryError propagates.
+        # An absent GPU retry receipt must never be normalized to zero here.
+        "oom_retries": 0,
         "factor_tiles_processed": count,
         "source_snapshot_id": metadata.snapshot_id,
         "host_result_bytes_reserved": reserved,

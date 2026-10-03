@@ -24,6 +24,7 @@ from quant_evaluator.runtime.source_route_profiles import (
 from quant_evaluator.scripts.source_profile_measurement import (
     _counts_array, _metric_array, build_counterbalanced_profile_record,
 )
+from quant_evaluator.scripts.source_profile_measurement import build_backend_profile_measurement
 
 RUN_ORDER = ("cpu", "cuda_strict", "cuda_strict", "cpu")
 
@@ -43,6 +44,62 @@ class SourceRouteProfileABBAResult:
     run_order: tuple[str, str, str, str]
     oracle_reports: tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]
 
+
+
+_ORACLE_REPORT_FIELDS = frozenset({
+    "pass", "expected_coverage", "observed_coverage", "shape_equal",
+    "finite_mask_equal", "nan_mask_equal", "positive_infinity_mask_equal",
+    "negative_infinity_mask_equal", "observation_counts_equal", "max_abs_error",
+    "tolerance",
+})
+
+
+def _progress_event(run_index: int, backend: str, receipt: Mapping[str, Any],
+                    oracle_report: Mapping[str, Any]) -> dict[str, Any]:
+    """Copy only bounded, JSON-safe progress fields; never expose raw receipts."""
+    safe_metrics: dict[str, dict[str, Any]] = {}
+    for metric, details in oracle_report.get("metrics", {}).items():
+        if not isinstance(metric, str) or not isinstance(details, Mapping):
+            continue
+        selected = {}
+        for field in _ORACLE_REPORT_FIELDS:
+            value = details.get(field)
+            if type(value) in (bool, int):
+                selected[field] = value
+            elif type(value) is float and np.isfinite(value):
+                selected[field] = value
+        safe_metrics[metric] = selected
+    safe_oracle = {
+        "pass": oracle_report.get("pass") is True,
+        "backend": backend,
+        "run_index": int(run_index),
+        "metrics": safe_metrics,
+    }
+
+    def safe_number(value, expected_type):
+        if type(value) is expected_type:
+            if expected_type is float and not np.isfinite(value):
+                return None
+            return value
+        return None
+
+    actual_gpu_width = receipt.get("actual_gpu_factor_tile_size")
+    if type(actual_gpu_width) is not int:
+        actual_gpu_width = None
+    return {
+        "phase": "run_validated",
+        "run_index": int(run_index),
+        "backend_used": backend,
+        "seconds": safe_number(receipt.get("seconds"), float),
+        "total_wall_seconds": safe_number(receipt.get("total_wall_seconds"), float),
+        "oom_retries": safe_number(receipt.get("oom_retries"), int),
+        "actual_source_tile_size": safe_number(
+            receipt.get("actual_source_tile_size"), int),
+        "actual_gpu_factor_tile_size": actual_gpu_width,
+        "effective_max_tile_size": safe_number(
+            receipt.get("effective_max_tile_size"), int),
+        "oracle_report": safe_oracle,
+    }
 
 def live_source_profile_context_observer(
     *, phase: str, source, labels, metrics, requested_tile_size: int,
@@ -181,9 +238,9 @@ def produce_source_route_profile_abba(
     run_backend_fn: Callable | None = None,
     context_observer: Callable = live_source_profile_context_observer,
     comparison_fn: Callable | None = None,
+    progress_observer: Callable | None = None,
 ) -> SourceRouteProfileABBAResult:
     """Run CPU/CUDA/CUDA/CPU and independently validate every backend output.
-
     The oracle must return, per requested metric, independent floating ``values``
     and integer ``observation_counts`` arrays. Each run is checked for exact
     coverage, finite/NaN/+Inf/-Inf masks, exact counts, and the live tolerance.
@@ -194,6 +251,8 @@ def produce_source_route_profile_abba(
     The runner and observer seams support bounded unit tests. Production callers
     should use the real benchmark runner and the default live-context observer.
     """
+    if progress_observer is not None and not callable(progress_observer):
+        raise TypeError("progress_observer must be callable or None")
     if not callable(oracle):
         raise ValueError("an independent oracle callback is required")
     if not isinstance(run_kwargs, Mapping) or "context_observer" in run_kwargs:
@@ -233,6 +292,14 @@ def produce_source_route_profile_abba(
         oracle_reports.append(_oracle_report(
             bundle, receipt, before, backend=expected_backend,
             run_index=run_index, oracle=oracle))
+        if progress_observer is not None:
+            event = _progress_event(
+                run_index, expected_backend, receipt, oracle_reports[-1])
+            progress_observer(event)
+        # Validate the individual real-run receipt now. This intentionally
+        # follows progress delivery so a rejected run still leaves safe status.
+        build_backend_profile_measurement(
+            bundle, receipt, before, correctness_validated=True)
         runs.append((bundle, dict(receipt)))
 
     selected_metrics = contexts[0].metric_ids

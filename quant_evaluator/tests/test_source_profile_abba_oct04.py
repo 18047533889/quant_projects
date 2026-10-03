@@ -132,7 +132,7 @@ def test_oracle_rejects_negative_or_int64_overflow_counts(sample, bad_counts):
         _run_with_oracle(sample, oracle)
 
 
-def _run_with_oracle(sample, oracle, *, observer=None, runner_mutator=None):
+def _run_with_oracle(sample, oracle, *, observer=None, runner_mutator=None, progress_observer=None):
     context, cpu, cuda, cpu_receipt, cuda_receipt, comparison = sample
     run_index = 0
     def stable_observer(**kwargs):
@@ -152,7 +152,8 @@ def _run_with_oracle(sample, oracle, *, observer=None, runner_mutator=None):
     return produce_source_route_profile_abba(
         run_backend_fn=runner, context_observer=observer or stable_observer,
         run_kwargs={"request": "test"}, oracle=oracle,
-        comparison_fn=lambda *args, **kwargs: comparison)
+        comparison_fn=lambda *args, **kwargs: comparison,
+        progress_observer=progress_observer)
 
 
 @pytest.mark.parametrize("mutation", ["nan", "positive_inf", "negative_inf"])
@@ -273,3 +274,85 @@ def test_order_dependent_winner_drift_fails_closed(sample):
     with pytest.raises(ValueError, match="winner"):
         _run_with_oracle(sample, lambda *, bundle, **kwargs: sample[1],
                          runner_mutator=mutate)
+
+def test_invalid_progress_observer_fails_before_backend_run(sample):
+    calls = []
+    with pytest.raises(TypeError, match="progress_observer"):
+        produce_source_route_profile_abba(
+            run_backend_fn=lambda *args, **kwargs: calls.append(args),
+            run_kwargs={}, oracle=lambda **kwargs: {}, progress_observer=object())
+    assert calls == []
+
+
+def test_progress_callback_error_stops_before_profile_qualification(sample):
+    calls = []
+
+    def mutate(receipt, index, backend):
+        calls.append(backend)
+        return receipt
+
+    def fail(event):
+        raise RuntimeError("observer stopped")
+
+    with pytest.raises(RuntimeError, match="observer stopped"):
+        _run_with_oracle(
+            sample, lambda *, bundle, **kwargs: sample[1],
+            runner_mutator=mutate, progress_observer=fail)
+    assert calls == ["cpu"]
+
+
+def test_progress_keeps_four_safe_events_before_pair_aggregation_failure(sample):
+    events = []
+
+    def reorder_winners(receipt, index, backend):
+        receipt["seconds"] = {0: 0.1, 1: 0.2, 2: 0.1, 3: 0.2}[index]
+        receipt["total_wall_seconds"] = receipt["seconds"]
+        return receipt
+
+    with pytest.raises(ValueError, match="winner"):
+        _run_with_oracle(
+            sample, lambda *, bundle, **kwargs: sample[1],
+            runner_mutator=reorder_winners,
+            progress_observer=lambda event: events.append(event))
+
+    assert len(events) == 4
+    assert all(set(event) == {
+        "phase", "run_index", "backend_used", "seconds", "total_wall_seconds",
+        "oom_retries", "actual_source_tile_size", "actual_gpu_factor_tile_size",
+        "effective_max_tile_size", "oracle_report",
+    } for event in events)
+    assert [event["backend_used"] for event in events] == ["cpu", "cuda", "cuda", "cpu"]
+    assert all(event["phase"] == "run_validated" for event in events)
+    assert all("source_snapshot_id" not in event for event in events)
+    assert all("pass" in event["oracle_report"] for event in events)
+
+
+def test_retry_rejection_keeps_only_its_validated_progress_event(sample):
+    events = []
+    calls = []
+
+    def mutate(receipt, index, backend):
+        calls.append(backend)
+        if index == 0:
+            receipt["oom_retries"] = 1
+        return receipt
+
+    with pytest.raises(ValueError, match="zero OOM retries"):
+        _run_with_oracle(
+            sample, lambda *, bundle, **kwargs: sample[1],
+            runner_mutator=mutate, progress_observer=lambda event: events.append(event))
+
+    assert calls == ["cpu"]
+    assert len(events) == 1
+    assert events[0]["oom_retries"] == 1
+
+
+def test_progress_callback_cannot_mutate_internal_oracle_qualification(sample):
+    def tamper(event):
+        event["oracle_report"]["pass"] = False
+        event["oracle_report"]["metrics"]["rank_ic"]["pass"] = False
+
+    result = _run_with_oracle(
+        sample, lambda *, bundle, **kwargs: sample[1], progress_observer=tamper)
+    assert len(result.records) == 2
+    assert all(report["pass"] for report in result.oracle_reports)

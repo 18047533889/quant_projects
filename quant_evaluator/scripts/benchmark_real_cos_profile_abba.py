@@ -103,13 +103,27 @@ def _oracle_mapping(bundle):
 
 
 def _dump(report, path=None):
-    body = json.dumps(report, indent=2, ensure_ascii=False, default=str)
+    body = json.dumps(report, indent=2, ensure_ascii=False, default=str, allow_nan=False)
     if len(body.encode("utf-8")) > 1024**2:
         raise ValueError("profile report exceeds 1 MiB")
     if path is not None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(body + "\n", encoding="utf-8")
     print(body)
+
+
+def _save_progress(base, path, events, *, status="running", error_type=None):
+    """Diagnostic only: never include qualification records in partial reports."""
+    report = {**base, "status": status, "run_started": True,
+              "validated_runs": events,
+              "qualification_available": False}
+    if error_type is not None:
+        report["error_type"] = error_type
+    body = json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False)
+    if len(body.encode("utf-8")) > 1024**2:
+        raise ValueError("progress report exceeds 1 MiB")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(body + "\n", encoding="utf-8")
 
 
 def _checked_run_backend(backend, **kwargs):
@@ -179,9 +193,21 @@ def main(argv=None):
     gate2 = preflight()
     if not gate2.get("pass"):
         raise SystemExit("preflight rejected before ABBA timing")
-    result = produce_source_route_profile_abba(oracle=lambda **_: oracle_bundle,
-        run_kwargs=common, context_observer=live_source_profile_context_observer,
-        run_backend_fn=_checked_run_backend)
+    validated_runs = []
+    progress_path = args.output.with_suffix(args.output.suffix + ".progress.json")
+    def progress(event):
+        if len(validated_runs) >= 4:
+            raise ValueError("ABBA progress exceeds four runs")
+        validated_runs.append(event)
+        _save_progress(base, progress_path, validated_runs)
+    try:
+        result = produce_source_route_profile_abba(oracle=lambda **_: oracle_bundle,
+            run_kwargs=common, context_observer=live_source_profile_context_observer,
+            run_backend_fn=_checked_run_backend, progress_observer=progress)
+    except (Exception, SystemExit) as exc:
+        _save_progress(base, progress_path, validated_runs,
+                       status="failed", error_type=type(exc).__name__)
+        raise
     qualification_records = result.records
     from quant_evaluator.runtime.source_route_profiles import validate_source_route_profile_qualification
     qualification = validate_source_route_profile_qualification(
