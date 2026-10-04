@@ -127,6 +127,7 @@ def _ranges(value: object, *, factor_count: int, width: int, name: str) -> tuple
 def build_backend_profile_measurement(
     bundle: BatchEvaluationBundle, run_receipt: Mapping[str, Any],
     context: SourceRouteProfileContext, *, correctness_validated: bool,
+    qualified_execution_cap: int | None = None,
 ) -> BackendRouteProfileMeasurement:
     """Bind one real backend run to v2 timing, schedule, and output receipts."""
     receipt = _mapping(run_receipt, "run_receipt")
@@ -170,13 +171,34 @@ def build_backend_profile_measurement(
     expected_effective_cap = (context.live_source_admitted_max_tile_size
                               if backend == "cpu"
                               else context.gpu_admitted_max_tile_size)
-    cap_is_small_factor_extent = expected_effective_cap == F
-    effective_cap_valid = (
-        type(effective_cap) is int
-        and (effective_cap == expected_effective_cap
-             if not cap_is_small_factor_extent
-             else F <= effective_cap <= context.requested_tile_size)
-    )
+    if qualified_execution_cap is not None:
+        # Qualified auto pins the measured execution width, which may be lower
+        # than its original admission ceiling. Do not alter that context.
+        if (type(qualified_execution_cap) is not int
+                or not 1 <= qualified_execution_cap <= expected_effective_cap):
+            raise ValueError("qualified execution cap is outside live admission")
+        if (receipt.get("backend_requested") != "auto"
+                or receipt.get("source_auto_policy") != "qualified_only"
+                or bundle_meta.get("source_auto_policy") != "qualified_only"
+                or receipt.get("context_before") != context
+                or receipt.get("context_after") != context
+                or bundle_meta.get("source_qualification_applied") is not True
+                or bundle_meta.get("source_qualification_status") != "qualified_current_source"
+                or bundle_meta.get("source_qualification_winner") != backend):
+            raise ValueError("qualified execution cap requires qualified-only auto")
+        if (source_width != qualified_execution_cap
+                or (backend == "cuda" and actual_width != qualified_execution_cap)):
+            raise ValueError("qualified execution cap differs from actual execution width")
+        effective_cap_valid = (
+            type(effective_cap) is int and effective_cap == qualified_execution_cap)
+    else:
+        cap_is_small_factor_extent = expected_effective_cap == F
+        effective_cap_valid = (
+            type(effective_cap) is int
+            and (effective_cap == expected_effective_cap
+                 if not cap_is_small_factor_extent
+                 else F <= effective_cap <= context.requested_tile_size)
+        )
     if not effective_cap_valid or source_width > effective_cap:
         raise ValueError("run effective source cap differs from backend live context")
     if receipt.get("execution_schedule_scope") != _SCHEDULE_SCOPE:
