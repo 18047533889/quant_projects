@@ -41,6 +41,12 @@ def _correlation(x, y, *, spearman):
     if spearman:
         x = rankdata(x, method="average")
         y = rankdata(y, method="average")
+        # Equal or complementary average ranks prove +/-1 independently;
+        # do not turn normalization roundoff into enormous summary ICIR.
+        if np.array_equal(x, y):
+            return 1.0
+        if np.all(x + y == len(x) + 1):
+            return -1.0
     else:
         # Independent, scale-safe row oracle with Decimal fallback near constant.
         from quant_evaluator.scripts.source_pearson_oracle import reference_row_pearson

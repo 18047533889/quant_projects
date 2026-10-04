@@ -26,6 +26,16 @@ EXPOSURE = (
 )
 BASE = tuple(sorted(GPUExecutor.SUPPORTED_METRICS - set(PORTFOLIO) - set(EXPOSURE)))
 
+EXPECTED_BASE = frozenset((
+    "bottom_quantile_cliff", "coverage", "daily_quantile_monotonicity_rate",
+    "daily_quantile_monotonicity_series", "factor_turnover_rate", "ic_ir",
+    "ic_median", "ic_std", "pearson_ic", "pearson_ic_ir", "pearson_ic_series",
+    "pearson_ic_std", "quantile_adjacent_spread", "quantile_curvature",
+    "quantile_extreme_cliff", "quantile_monotonicity", "quantile_returns_daily",
+    "quantile_returns_full", "quantile_spread", "quantile_tail_asymmetry", "rank_ic",
+    "rank_ic_positive_ratio", "rank_ic_series", "recent_3m_rank_ic",
+    "rolling_rank_ic_ir", "top_quantile_cliff", "turnover",
+))
 
 def contracts():
     rng = np.random.default_rng(20260908)
@@ -63,11 +73,11 @@ def assert_public_parity(cpu, gpu, metrics):
                     right.valid, right.observation_count, right.sample_unit)
 
 
-def test_all_19_factor_label_metrics_execute_real_cpu_and_strict_cuda():
+def test_all_27_factor_label_metrics_execute_real_cpu_and_strict_cuda():
     batch, labels = contracts()
     cpu = evaluate(batch, labels, metrics=BASE)
     gpu = evaluate(batch, labels, metrics=BASE, backend="cuda_strict")
-    assert len(BASE) == 19
+    assert len(BASE) == 27
     assert_public_parity(cpu, gpu, BASE)
     assert gpu.metadata["peak_vram"] > 0 and gpu.metadata["factor_tiles_processed"] >= 1
 
@@ -153,6 +163,7 @@ def test_v5_long_only_and_cost_metrics_are_strictly_unsupported_before_gpu_open(
     assert opened == []
 
 
-def test_supported_matrix_is_exactly_33_without_metadata_only_entries():
-    assert len(BASE) + len(PORTFOLIO) + len(EXPOSURE) == 33
+def test_supported_matrix_is_exactly_41_with_explicit_factor_label_capability_set():
+    assert frozenset(BASE) == EXPECTED_BASE
+    assert len(BASE) + len(PORTFOLIO) + len(EXPOSURE) == 41
     assert set(BASE) | set(PORTFOLIO) | set(EXPOSURE) == GPUExecutor.SUPPORTED_METRICS

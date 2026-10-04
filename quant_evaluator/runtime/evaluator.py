@@ -15,6 +15,7 @@ import numpy as np
 import time
 
 from quant_evaluator.contracts.factor_batch import FactorBatch
+from quant_evaluator.contracts.metric_parameter_policy import RUNTIME_INPUT_PARAMETERS
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.errors import (
     InvalidContractError,
@@ -1814,9 +1815,7 @@ def evaluate(
         if canonical in generalization_ids and overrides:
             raise InvalidContractError("Generalization policy and inputs must be bound in the typed comparison artifact")
         signature = inspect.signature(resolved_specs[canonical].compute_fn)
-        forbidden = {"factor_batch", "label_bundle", "computed_metrics", "metadata",
-                     "factor_values", "forward_returns", "returns", "validity_mask",
-                     "calendar_snapshot", "time_index", "factor_ids"}
+        forbidden = RUNTIME_INPUT_PARAMETERS
         invalid = (set(overrides) - set(signature.parameters)) | (set(overrides) & forbidden)
         if "ICSeriesArtifact" in (resolved_specs[canonical].requires or []):
             invalid.discard("min_assets")
@@ -2243,9 +2242,7 @@ def evaluate(
                 continue
             if parameters:
                 signature = inspect.signature(spec.compute_fn)
-                forbidden = {"factor_batch", "label_bundle", "computed_metrics", "metadata",
-                             "factor_values", "forward_returns", "returns", "validity_mask",
-                             "daily_quantile_artifact", "_bind_request_inputs"}
+                forbidden = RUNTIME_INPUT_PARAMETERS
                 unknown = set(parameters) - set(signature.parameters)
                 if "ICSeriesArtifact" in (spec.requires or []):
                     unknown.discard("min_assets")
@@ -2716,6 +2713,7 @@ def evaluate(
                     "label_content_hash": label_bundle.content_hash,
                     "factor_value_hash": factor_batch.value_hash,
                     "n_quantiles": params.get("n_quantiles", 5),
+                    "tie_method": "max",
                     "min_assets": min_assets,
                     "min_periods": params.get("min_periods", 20),
                     "split_ref": None,

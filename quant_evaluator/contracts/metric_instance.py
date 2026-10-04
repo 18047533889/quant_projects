@@ -5,6 +5,7 @@ from typing import Any, Mapping, Optional
 
 from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.metric_artifacts import FrozenMapping
+from quant_evaluator.contracts.metric_parameter_policy import RUNTIME_INPUT_PARAMETERS
 
 
 @dataclass(frozen=True)
@@ -37,8 +38,7 @@ class MetricInstance:
         if self.horizon is not None and (type(self.horizon) is not int or self.horizon < 1):
             raise ValueError("Metric instance horizon must be a positive integer")
         signature = inspect.signature(spec.compute_fn)
-        runtime = {"factor_batch", "label_bundle", "computed_metrics", "metadata", "factor_values",
-                   "forward_returns", "returns", "validity_mask", "calendar_snapshot", "time_index", "factor_ids"}
+        runtime = RUNTIME_INPUT_PARAMETERS
         invalid = set(self.parameters) - set(signature.parameters) | (set(self.parameters) & runtime)
         if invalid:
             raise ValueError(f"Invalid metric instance parameters: {sorted(invalid)}")

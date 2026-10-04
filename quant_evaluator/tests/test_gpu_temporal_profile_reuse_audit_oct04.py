@@ -128,8 +128,8 @@ def test_quantile_key_isolates_n_quantiles_and_min_assets(monkeypatch):
     monkeypatch.setattr(metrics_registry, "get_metric", fake_metric)
     executor.metric_parameters = {
         "quantile_returns_full": {"n_quantiles": 3, "min_assets": 7},
-        "quantile_monotonicity": {"n_quantiles": 4, "min_assets": 8},
     }
+    executor.quantile_builder_parameters = {"n_quantiles": 4, "min_assets": 8}
     executor.run(("f0",), ("quantile_returns_full", "quantile_monotonicity"))
 
     assert [(q, assets, ) for q, assets, _labels, _factors in quantile_calls] == [

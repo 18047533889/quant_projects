@@ -16,7 +16,15 @@ def test_rank_ic_is_exact_scipy_coefficient_for_ties_and_distinct_values(size, d
             if np.unique(x).size < 2 or np.unique(y).size < 2:
                 assert np.isnan(_spearman_rank_correlation(x, y, min_obs=2))
             else:
-                assert _spearman_rank_correlation(x, y, min_obs=2) == stats.spearmanr(x, y).statistic
+                reference = stats.spearmanr(x, y).statistic
+                rx, ry = stats.rankdata(x), stats.rankdata(y)
+                # Independently prove average-rank endpoints; keep the
+                # ordinary SciPy equality assertion strictly bit-exact.
+                if np.array_equal(rx, ry):
+                    reference = 1.0
+                elif np.all(rx + ry == size + 1):
+                    reference = -1.0
+                assert _spearman_rank_correlation(x, y, min_obs=2) == reference
 
 
 def test_rank_ic_pairwise_extremes_and_minimum_count_are_preserved():

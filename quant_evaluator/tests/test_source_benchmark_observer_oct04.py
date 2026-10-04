@@ -39,7 +39,8 @@ def test_observer_order_timer_and_close(monkeypatch, fail_phase):
             raise RuntimeError("evaluate")
         source.reads.append((0, 2))
         return SimpleNamespace(metadata={"backend_used": "cpu",
-            "effective_max_tile_size": 16, "factor_tiles_processed": 1})
+            "effective_max_tile_size": 16, "factor_tiles_processed": 1,
+            "source_auto_policy": kwargs["source_auto_policy"]})
 
     ticks = iter([10.0, 12.0])
     def timer():
@@ -78,7 +79,8 @@ def test_auto_verification_forwards_exact_supplied_qualification(monkeypatch):
         observed.append(kwargs)
         source.reads.append((0, 2))
         return SimpleNamespace(metadata={"backend_used": "cpu",
-            "effective_max_tile_size": 16, "factor_tiles_processed": 1})
+            "effective_max_tile_size": 16, "factor_tiles_processed": 1,
+            "source_auto_policy": kwargs["source_auto_policy"]})
 
     monkeypatch.setattr(harness, "evaluate_factor_source_batch", evaluate)
     _, receipt = harness.run_backend("auto", records, rows, dates, assets.values,

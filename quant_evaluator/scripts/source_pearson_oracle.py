@@ -5,6 +5,7 @@ Decimal centered moments handle near-constant rows without subtractive loss.
 The caller supplies a fresh sequential source and owns its close lifecycle.
 """
 from decimal import Decimal, localcontext
+from fractions import Fraction
 import math
 import warnings
 
@@ -35,6 +36,22 @@ def _decimal_correlation(x, y):
         return float(sum(a * b for a, b in zip(dx, dy)) / (xx * yy).sqrt())
 
 
+def _exact_affine_endpoint_sign(x, y):
+    """Return +/-1 only when the stored binary floats are exactly affine."""
+    fx = [Fraction.from_float(float(v)) for v in x]
+    fy = [Fraction.from_float(float(v)) for v in y]
+    anchor = next((i for i in range(1, len(fx)) if fx[i] != fx[0]), None)
+    if anchor is None:
+        return None
+    slope = (fy[anchor] - fy[0]) / (fx[anchor] - fx[0])
+    if slope == 0:
+        return None
+    intercept = fy[0] - slope * fx[0]
+    if all(yi == slope * xi + intercept for xi, yi in zip(fx, fy)):
+        return 1 if slope > 0 else -1
+    return None
+
+
 def reference_row_pearson(x, y, *, min_assets=20):
     """Finite vectors already filtered by caller's pairwise validity mask."""
     if type(min_assets) is not int or min_assets < 2:
@@ -53,6 +70,12 @@ def reference_row_pearson(x, y, *, min_assets=20):
         return math.nan
     if np.all(x == x[0]) or np.all(y == y[0]):
         return math.nan
+    # Algebraic identities, independently checked before SciPy normalization:
+    # its ulp noise must not manufacture dispersion for a perfect IC series.
+    if np.array_equal(x, y):
+        return 1.0
+    if np.array_equal(x, -y):
+        return -1.0
     sx, sy = float(np.max(np.abs(x))), float(np.max(np.abs(y)))
     # Scaling is safe for ordinary rows and avoids overflow of raw sums.
     ax, ay = x / sx, y / sy
@@ -64,6 +87,12 @@ def reference_row_pearson(x, y, *, min_assets=20):
         with warnings.catch_warnings():
             warnings.simplefilter("error", RuntimeWarning)
             value = float(pearsonr(ax, ay).statistic)
+    # Only perform rational proof for numerically endpoint-like candidates.
+    # Near-perfect but non-affine data retains the independent numeric result.
+    if math.isfinite(value) and abs(value) >= 1.0 - 1e-12:
+        exact_sign = _exact_affine_endpoint_sign(x, y)
+        if exact_sign is not None:
+            return float(exact_sign)
     if not math.isfinite(value):
         raise ValueError("independent Pearson oracle produced nonfinite correlation")
     return max(-1.0, min(1.0, value))

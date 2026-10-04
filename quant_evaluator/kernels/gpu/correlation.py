@@ -18,6 +18,7 @@ import numpy as np
 from quant_evaluator.kernels.gpu.rank import batched_rank
 from quant_evaluator.kernels.gpu.pearson_repair import repair_unsafe_pearson_rows
 from quant_evaluator.kernels.gpu.pearson_centered_fused import fused_centered_sums
+from quant_evaluator.kernels.gpu.pearson_endpoint import certify_gpu_pearson_endpoints
 
 
 def _import_cp():
@@ -27,7 +28,8 @@ def _import_cp():
 
 
 
-def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
+def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False,
+                          exact_endpoints: bool = False):
     """Compute Pearson sums over pairwise-finite (T,F,N) x and y.
 
     y may be (T,N) (broadcast to (T,1,N)) or (T,F,N). Returns
@@ -78,13 +80,16 @@ def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
     denom = cp.sqrt(vx * vy)
     ic = cov / denom
 
-    # Float16/float32 inputs are far inside float64's squared-norm range,
-    # including their smallest subnormals; retain the no-sync fast path.
+    # Float16/float32 inputs stay inside float64's squared-norm range, including
+    # their smallest subnormals. The arithmetic path avoids unsafe-row repair;
+    # Pearson endpoint candidate discovery still introduces a rare sync below.
     if bounded or (
         x.dtype in (cp.float16, cp.float32)
         and yb.dtype in (cp.float16, cp.float32)
     ):
         ic = cp.where((n < min_obs) | (vx <= 0) | (vy <= 0), cp.nan, ic)
+        if exact_endpoints:
+            ic = certify_gpu_pearson_endpoints(ic, x, yb, finite)
         return ic, n.astype(cp.int32)
 
     # The direct product may overflow/underflow even when each variance is
@@ -104,6 +109,8 @@ def _pairwise_finite_sums(x, y, min_obs: int, *, bounded: bool = False):
         x, yb, finite, unsafe, ic,
         n_factors=x.shape[1], y_is_broadcast=(yb.shape[1] == 1),
     )
+    if exact_endpoints:
+        ic = certify_gpu_pearson_endpoints(ic, x, yb, finite)
 
     ic = cp.where(n < min_obs, cp.nan, ic)
     return ic, n.astype(cp.int32)
@@ -135,7 +142,7 @@ def batched_pearson_ic(
         if lv.ndim == 1:
             lv = lv[:, None]
         y = cp.where(lv, y, cp.nan)
-    return _pairwise_finite_sums(x, y, min_obs)
+    return _pairwise_finite_sums(x, y, min_obs, exact_endpoints=True)
 
 
 def batched_spearman_ic(

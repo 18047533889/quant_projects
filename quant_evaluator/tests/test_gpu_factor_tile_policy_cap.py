@@ -88,6 +88,20 @@ def _source_inputs():
     return Source(), label
 
 
+def _valid_mock_gpu_output(source, label, metrics, tile_size):
+    factor_count = len(source.factor_ids)
+    tile_count = (factor_count + tile_size - 1) // tile_size
+    return BatchEvaluationBundle(
+        factor_ids=tuple(source.factor_ids), label_id=label.target_id,
+        scalar_metrics={metric: np.zeros(factor_count, dtype=np.float64)
+                        for metric in metrics},
+        observation_counts={metric: np.zeros(factor_count, dtype=np.int64)
+                            for metric in metrics},
+        metadata={"factor_tile_size": tile_size, "factor_tiles_processed": tile_count,
+                  "oom_retries": 0},
+    )
+
+
 def test_source_auto_cap_below_certified_width_falls_back_without_shrinking_cpu(monkeypatch):
     evidence = SimpleNamespace(effective_tile_width=2, minimum_effective_vram_bytes=0,
                                legacy_reason="certified", evidence_id="test",
@@ -96,7 +110,9 @@ def test_source_auto_cap_below_certified_width_falls_back_without_shrinking_cpu(
     source, label = _source_inputs()
     result = factor_source_api.evaluate_factor_source_batch(
         source, label, metrics=("coverage",), backend="auto",
-        gpu_policy=GPUExecutionPolicy(max_factor_tile_size=1))
+        gpu_policy=GPUExecutionPolicy(max_factor_tile_size=1),
+        # This test covers the explicitly opted-in historical static selector.
+        source_auto_policy="legacy_measured")
     assert result.metadata["backend_used"] == "cpu"
     assert result.metadata["auto_backend_reason"] == "source_policy_tile_cap_outside_certified_tile"
     assert result.metadata["execution_receipt"]["effective_max_tile_size"] == 3
@@ -122,7 +138,7 @@ def test_source_gpu_routes_apply_policy_cap_but_cpu_route_does_not(monkeypatch):
 
         def run_source_tiled(self, source, label, metrics, *, max_tile_size, source_metadata):
             calls.append(max_tile_size)
-            return SimpleNamespace(metadata={"factor_tile_size": max_tile_size})
+            return _valid_mock_gpu_output(source, label, metrics, max_tile_size)
 
     monkeypatch.setattr(factor_source_api, "select_source_auto_route", lambda **_kw: None)
     monkeypatch.setattr("quant_evaluator.runtime.device_session.DeviceEvaluationSession", Session)
@@ -188,14 +204,16 @@ def test_source_auto_keeps_certified_width_when_policy_cap_is_larger(monkeypatch
         def run_source_tiled(self, _source, _label, _metrics, *, max_tile_size,
                              source_metadata):
             calls.append(max_tile_size)
-            return SimpleNamespace(metadata={"factor_tile_size": max_tile_size})
+            return _valid_mock_gpu_output(_source, _label, _metrics, max_tile_size)
 
     monkeypatch.setattr("quant_evaluator.runtime.device_session.DeviceEvaluationSession", Session)
     monkeypatch.setattr("quant_evaluator.runtime.gpu_executor.GPUExecutor", Executor)
     source, label = _source_inputs()
     result = factor_source_api.evaluate_factor_source_batch(
         source, label, metrics=("coverage",), backend="auto",
-        gpu_policy=GPUExecutionPolicy(max_factor_tile_size=3))
+        gpu_policy=GPUExecutionPolicy(max_factor_tile_size=3),
+        # Static evidence is intentionally outside the production default.
+        source_auto_policy="legacy_measured")
     assert calls == [2]
     receipt = result.metadata["execution_receipt"]
     assert receipt["max_factor_tile_size"] == 3

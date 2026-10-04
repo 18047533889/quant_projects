@@ -593,8 +593,23 @@ def _evaluate_calibrated_batch_impl(
                 cache=cache, gpu_policy=gpu_policy, evaluate_fn=evaluate_fn,
                 _measurement_started=budget_started,
             )
+        # The reservation recheck must not hide the initial identity work.
+        # Keep both receipts and report per-public-call totals; unknown strict
+        # hashing diagnostics stay unknown, never get converted to zero.
+        final_source_check = result.metadata["source_check"]
+        total_source_check = dict(final_source_check)
+        for field_name in ("files_hashed", "bytes_hashed"):
+            initial, final = source_metadata.get(field_name), final_source_check.get(field_name)
+            total_source_check[field_name] = (
+                initial + final if type(initial) is int and type(final) is int else None)
         return CalibratedEvaluation(result.bundle, {
-            **result.metadata, "calibration_queue_seconds": waited_seconds,
+            **result.metadata,
+            "source_check": total_source_check,
+            "source_check_initial": source_metadata,
+            "source_check_final": final_source_check,
+            "input_fingerprint_seconds": hash_seconds + result.metadata.get("input_fingerprint_seconds", 0.0),
+            "setup_seconds": setup_seconds + result.metadata["setup_seconds"],
+            "calibration_queue_seconds": waited_seconds,
         })
 
     # Complete public evaluations cannot be interrupted safely. Check the soft

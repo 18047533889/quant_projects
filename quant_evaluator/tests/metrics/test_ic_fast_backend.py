@@ -224,9 +224,9 @@ def test_corrcoef_pair_replication_bit_exact():
 
 
 def test_corrcoef_rank_replication_bit_exact():
-    """_corrcoef_rank_last must replicate
-    np.corrcoef(column_stack((rx, ry)), rowvar=False)[1, 0] bitwise for
-    genuine average-tie rank vectors (its only input domain)."""
+    """Ordinary average ranks remain bit-exact to NumPy; independently
+    proved identical/complementary ranks have mathematical endpoints.
+    No tolerance-based exemption is permitted."""
     rng = np.random.default_rng(215)
     checked = 0
     for trial in range(500):
@@ -234,6 +234,12 @@ def test_corrcoef_rank_replication_bit_exact():
         rx = sstats.rankdata(rng.normal(size=n), method="average")
         ry = sstats.rankdata(rng.normal(size=n), method="average")
         ref = np.corrcoef(np.column_stack((rx, ry)), rowvar=False)[1, 0]
+        # Independent algebra on the inputs, not the production certifier.
+        # Average ranks are exact half-integers in this bounded fixture.
+        if np.array_equal(rx, ry):
+            ref = 1.0
+        elif np.all(rx + ry == n + 1):
+            ref = -1.0
         got = _corrcoef_rank_last(rx, ry, n)
         assert got == ref, f"trial={trial} ref={ref!r} got={got!r}"
         checked += 1

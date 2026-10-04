@@ -162,15 +162,15 @@ def test_budget_charges_one_real_shared_artifact_builder_node():
 
 
 def test_quantile_consumers_share_raw_builder_across_profile_policies(monkeypatch):
-    import quant_evaluator.metrics.quantile as kernels
-    original = kernels.compute_quantile_returns_fast
+    import quant_evaluator.metrics.registry_adapters as adapters
+    original = adapters.compute_quantile_returns_fast
     calls = []
 
     def counted(*args, **kwargs):
         calls.append((kwargs['n_quantiles'], kwargs['min_assets']))
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(kernels, 'compute_quantile_returns_fast', counted)
+    monkeypatch.setattr(adapters, 'compute_quantile_returns_fast', counted)
     batch, label = inputs()
     evaluate(batch, label, metrics=['quantile_monotonicity', 'shape_stability'])
     assert calls == [(5, 10)]

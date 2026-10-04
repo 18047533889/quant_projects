@@ -97,7 +97,8 @@ def test_default_tile_flag_is_forwarded_and_reported(monkeypatch):
     class Result:
         metadata = {"effective_max_tile_size": 2, "admitted_source_tile_size": 5,
                     "factor_tiles_processed": 1, "backend_used": "cuda",
-                    "factor_tile_size": 1, "oom_retries": 0}
+                    "factor_tile_size": 1, "oom_retries": 0,
+                    "source_auto_policy": "qualified_only"}
     def evaluate(*args, **kwargs):
         seen.update(kwargs)
         return Result()

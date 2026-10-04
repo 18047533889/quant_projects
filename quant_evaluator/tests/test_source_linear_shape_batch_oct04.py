@@ -124,7 +124,8 @@ def test_unqualified_auto_keeps_new_shape_request_on_cpu():
         source.close()
 
     assert result.metadata["backend_used"] == "cpu"
-    assert result.metadata["auto_backend_reason"] == "source_shape_or_metrics_not_certified"
+    # Default qualified-only mode does not consult historical static evidence.
+    assert result.metadata["auto_backend_reason"] == "source_qualification_required"
     assert result.metadata["source_qualification_applied"] is False
     assert result.metadata["source_qualification_winner"] is None
     assert source.reads == [(0, 2), (2, 3)]

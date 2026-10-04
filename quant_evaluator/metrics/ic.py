@@ -15,6 +15,7 @@ from quant_evaluator.contracts.factor_batch import FactorBatch
 from quant_evaluator.contracts.label_bundle import LabelBundle
 from quant_evaluator.contracts.errors import InsufficientObservations, InvalidContractError
 from quant_evaluator.metrics.label_panel import normalize_label_panel
+from quant_evaluator.metrics.correlation_endpoint import certify_correlation_endpoint
 
 
 def _pairwise_finite_mask(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -37,6 +38,9 @@ def _corrcoef_pair_1d(x_valid: np.ndarray, y_valid: np.ndarray, n: int) -> float
     1-D compressed arrays, minus the wrapper overhead of the public
     ``np.corrcoef``/``np.cov`` machinery (atleast_2d/copy checks, dtype
     resolution, diag try/except, complex branches).
+    Ordinary rows retain NumPy bits. Certified exact nonconstant affine
+    pairs return mathematical +/-1, and unsafe moments use the stabilized
+    path; these explicit exceptions do not relax ordinary-row equality.
 
     The operation sequence replicates numpy 2.2.6 ``cov`` + ``corrcoef``
     exactly (verified row-by-row by the fuzz checks in
@@ -73,11 +77,14 @@ def _corrcoef_pair_1d(x_valid: np.ndarray, y_valid: np.ndarray, n: int) -> float
         or np.any(stddev <= 0)
         or np.any(np.abs(avg) > stddev * 1e6)
     ):
-        return _stable_corrcoef_pair_1d(x_valid, y_valid, n)
+        return certify_correlation_endpoint(
+            _stable_corrcoef_pair_1d(x_valid, y_valid, n), x_valid, y_valid)
     c /= stddev[:, None]
     c /= stddev[None, :]
     np.clip(c.real, -1, 1, out=c.real)
-    return c[0, 1]
+    # Certified exact endpoints are the sole mathematical exception to the
+    # historical NumPy operation-order identity for ordinary correlations.
+    return certify_correlation_endpoint(c[0, 1], x_valid, y_valid)
 
 
 def _corrcoef_rank_last(rx: np.ndarray, ry: np.ndarray, n: int) -> float:
@@ -86,7 +93,9 @@ def _corrcoef_rank_last(rx: np.ndarray, ry: np.ndarray, n: int) -> float:
     rowvar=False)[1, 0]`` for average-tie rank vectors, with the wrapper
     overhead of ``np.corrcoef``/``np.cov`` removed.
 
-    Bit-exactness is guaranteed mathematically, not just empirically:
+    Ordinary-row bit-exactness follows the argument below. Certified exact
+    affine rank pairs return mathematical +/-1 instead of normalization
+    roundoff; this is the sole endpoint exception, not a tolerance rule.
 
     1. The sum of average-tie ranks of ``n`` items is exactly
        ``n(n+1)/2`` (each tie run averages to the exact mean of its
@@ -130,10 +139,10 @@ def _corrcoef_rank_last(rx: np.ndarray, ry: np.ndarray, n: int) -> float:
     stddev1 = np.sqrt(c11 * recip)
     r = ((c01 * recip) / stddev1) / stddev0
     if r > 1.0:
-        return 1.0
+        r = 1.0
     if r < -1.0:
-        return -1.0
-    return r
+        r = -1.0
+    return certify_correlation_endpoint(r, dx, dy)
 
 
 def _pearson_correlation(
@@ -217,7 +226,7 @@ def _spearman_rank_correlation(x: np.ndarray, y: np.ndarray, min_obs: int = 10) 
     # The coefficient path of scipy.spearmanr, without its unused p-value.
     # Keep its column layout and [1, 0] extraction (including rounding order).
     ranks = stats.rankdata(np.column_stack((x_valid, y_valid)), axis=0, method="average")
-    return np.corrcoef(ranks, rowvar=False)[1, 0]
+    return _corrcoef_rank_last(ranks[:, 0], ranks[:, 1], n)
 
 
 def compute_daily_ic(
@@ -241,7 +250,8 @@ def compute_daily_ic(
             "exact" is the default and produces the canonical bit-identical
             evidence payload (identity contract).  It runs the vectorized
             numpy path whose per-row correlation kernels replicate the
-            ``np.corrcoef`` op sequence bit-for-bit.
+            ``np.corrcoef`` op sequence bit-for-bit for ordinary rows;
+            certified exact affine endpoints return mathematical +/-1.
 
             "numba" is an OPT-IN fast path backed by a JIT-compiled kernel
             (``quant_evaluator.kernels.numba_backend.numba_daily_ic_fast``).
@@ -390,6 +400,8 @@ def compute_daily_ic(
                 "install it or use backend='exact'"
             )
         ic_series = numba_daily_ic_fast(v, lab, mask, eligible, min_assets, method)
+        from quant_evaluator.metrics.correlation_endpoint import certify_ic_panel_endpoints
+        certify_ic_panel_endpoints(ic_series, v, lab, mask, method=method)
         return ic_series, valid_counts
 
     if backend == "polars":
@@ -423,6 +435,8 @@ def compute_daily_ic(
         ic_series[~eligible] = np.nan
         pl_counts = pl_counts.astype(np.int32, copy=False)
         pl_counts[~eligible] = valid_counts[~eligible]
+        from quant_evaluator.metrics.correlation_endpoint import certify_ic_panel_endpoints
+        certify_ic_panel_endpoints(ic_series, v, lab, mask, method=method)
         return ic_series, pl_counts
 
     if backend == "gpu":

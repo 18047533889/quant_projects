@@ -443,7 +443,7 @@ C_{bottom}=r_2-r_1
 至少需要两个分位，且所需两格必须有限，否则 NaN。正值表示从最低桶进入次低桶时收益上升。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L231)；`quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L223)；`quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff`。
 
 <a id="metric-bottom_quantile_cliff_robust"></a>
 ## bottom_quantile_cliff_robust — Bottom Quantile Cliff (Robust)
@@ -647,7 +647,7 @@ V_f=\frac1T\sum_{t=1}^{T}(c_{t,f}-\bar c_f)^2
 其中 $`c_{t,f}=N^{-1}\sum_n\mathbf1\{x_{tnf},y_{tn}\text{共同有效}\}`$。但注册仅定位到返回 $`T\times F`$ 逐日覆盖矩阵的函数，并未绑定把矩阵归约成方差的可调用适配器；`ddof` 也未在注册中落实，故不得声称已有可执行标量结果。
 
 
-实现核对：[函数定义](../registry/metrics.py#L1169)；`quant_evaluator.registry.metrics._bind_coverage_stability_value`。
+实现核对：[函数定义](../registry/metrics.py#L1167)；`quant_evaluator.registry.metrics._bind_coverage_stability_value`。
 
 <a id="metric-cross_section_cardinality"></a>
 ## cross_section_cardinality — Cross-Section Cardinality
@@ -1110,7 +1110,7 @@ Coverage_f^{factor}=\frac1{TN}\sum_{t,n}\mathbf1\{x_{tnf}\ finite\ \land\ validi
 不要求标签共同有效。空输入或完全无证据按实现的缺失政策处理；不会跨因子平均。
 
 
-实现核对：[函数定义](../registry/metrics.py#L1162)；`quant_evaluator.registry.metrics._bind_factor_coverage_value`。
+实现核对：[函数定义](../registry/metrics.py#L1160)；`quant_evaluator.registry.metrics._bind_factor_coverage_value`。
 
 <a id="metric-factor_turnover_rate"></a>
 ## factor_turnover_rate — Factor Turnover Rate
@@ -1298,7 +1298,7 @@ HHI_f=\mathrm{mean}_{t:\,HHI_t\ finite}HHI_t
 
 
 
-实现核对：[函数定义](../registry/metrics.py#L1225)；`quant_evaluator.registry.metrics._bind_hhi_concentration_value`。
+实现核对：[函数定义](../registry/metrics.py#L1223)；`quant_evaluator.registry.metrics._bind_hhi_concentration_value`。
 
 <a id="metric-hhi_effective_n"></a>
 ## hhi_effective_n — hhi_effective_n
@@ -1329,7 +1329,7 @@ N_{eff,f}=\mathrm{mean}_{t:\,HHI_t\gt 0\ finite}\frac{1}{HHI_t},\qquad HHI_t=\su
 无有效日时为 NaN。
 
 
-实现核对：[函数定义](../registry/metrics.py#L1239)；`quant_evaluator.registry.metrics._bind_hhi_effective_n_value`。
+实现核对：[函数定义](../registry/metrics.py#L1237)；`quant_evaluator.registry.metrics._bind_hhi_effective_n_value`。
 
 <a id="metric-holm_bonferroni_correction"></a>
 ## holm_bonferroni_correction — Holm-Bonferroni Correction
@@ -1468,6 +1468,24 @@ ICIR_f=\frac{\bar{IC}_f}{s_f},\qquad s_f^2=\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}
 
 默认 `min_periods=20`。不足、常数序列或结果非有限时 NaN；不会对很小但非零的真实标准差做人为截断，也不年化。
 
+#### 完全相关端点与零离散度
+
+对于每日共同有效且非恒定的样本，若实际存储的二进制数值满足精确仿射关系：
+
+
+
+
+```math
+y_i=a x_i+b,\quad a\ne0\quad\Longrightarrow\quad IC_t=\mathrm{sign}(a)\in\{-1,+1\}.
+```
+
+
+
+
+接近端点只触发精确证明检查，不意味着自动舍入。Spearman 对共同有效样本的平均秩应用同一原则；同秩或互补秩分别为 +1、−1。恒定截面仍为 NaN。
+
+所有有限日的 IC 恒为同一个端点时，样本标准差精确为 0，ICIR 为 NaN（未定义），不是无穷大或约 $`10^{16}`$ 的浮点伪值。此口径也适用于 Pearson 日序列、标准差与 IR；不会把非完全相关样本的小幅真实变化归零。
+
 ### 函数层默认参数
 
 | 参数 | 默认值 |
@@ -1546,7 +1564,7 @@ P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}\gt 0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L155)；`quant_evaluator.metrics.predictive.compute_ic_positive_ratio`。
+实现核对：[函数定义](../metrics/predictive.py#L197)；`quant_evaluator.metrics.predictive.compute_ic_positive_ratio`。
 
 <a id="metric-ic_recent_vs_history_delta"></a>
 ## ic_recent_vs_history_delta — IC Recent vs History Delta
@@ -1583,7 +1601,7 @@ P_f^+=\frac{\sum_t\mathbf1(IC_{t,f}\gt 0)}{\sum_t\mathbf1(IC_{t,f}\ finite)}
 | `recent_days` | `63` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L300)；`quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta`。
+实现核对：[函数定义](../metrics/predictive.py#L342)；`quant_evaluator.metrics.predictive.compute_ic_recent_vs_history_delta`。
 
 <a id="metric-ic_serial_autocorrelation_lags_1_5_10_20"></a>
 ## ic_serial_autocorrelation_lags_1_5_10_20 — IC Serial Autocorrelation (lags 1/5/10/20)
@@ -1620,7 +1638,7 @@ S_f=\mathrm{nanmean}_{k\in\{1,5,10,20\}}Corr(IC_t,IC_{t-k})
 | `horizons` | `(1, 5, 10, 20)` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L270)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
+实现核对：[函数定义](../metrics/predictive.py#L312)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
 <a id="metric-ic_sign_consistency"></a>
 ## ic_sign_consistency — IC Sign Consistency
@@ -1656,7 +1674,7 @@ C_f=\frac1{n_f}\sum_{t:IC_t\ finite}\mathbf1\{sign(IC_t)=sign(\bar{IC})\}
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L287)；`quant_evaluator.metrics.predictive.compute_ic_sign_consistency`。
+实现核对：[函数定义](../metrics/predictive.py#L329)；`quant_evaluator.metrics.predictive.compute_ic_sign_consistency`。
 
 <a id="metric-ic_sign_flip_rate"></a>
 ## ic_sign_flip_rate — IC Sign Flip Rate
@@ -1741,7 +1759,7 @@ S_f=\mathrm{mean}_{w:\,S_{w,f}\ finite}S_{w,f}
 | `window_size` | `60` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../registry/metrics.py#L1205)；`quant_evaluator.registry.metrics._bind_ic_stability_value`。
+实现核对：[函数定义](../registry/metrics.py#L1203)；`quant_evaluator.registry.metrics._bind_ic_stability_value`。
 
 <a id="metric-ic_std"></a>
 ## ic_std — IC Standard Deviation
@@ -1778,7 +1796,7 @@ s_f=\sqrt{\frac1{n_f-1}\sum_t(IC_{t,f}-\bar{IC}_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L677)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L691)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-ic_summary"></a>
 ## ic_summary — ic_summary
@@ -1826,7 +1844,7 @@ Summary statistics (mean, std, skew, kurtosis) of IC time series
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../registry/metrics.py#L1196)；`quant_evaluator.registry.metrics._bind_ic_summary_value`。
+实现核对：[函数定义](../registry/metrics.py#L1194)；`quant_evaluator.registry.metrics._bind_ic_summary_value`。
 
 <a id="metric-industry_exposure"></a>
 ## industry_exposure — Industry Exposure
@@ -2279,7 +2297,7 @@ Time-averaged Pearson information coefficient: the time-mean of daily Pearson IC
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L663)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
+实现核对：[函数定义](../metrics/ic.py#L677)；`quant_evaluator.metrics.ic.compute_mean_ic_value`。
 
 <a id="metric-mean_investment_fraction"></a>
 ## mean_investment_fraction — Mean Investment Fraction
@@ -2497,7 +2515,7 @@ M_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
 | `min_periods` | `20` |
 | `time_index` | `None` |
 
-实现核对：[函数定义](../metrics/predictive.py#L181)；`quant_evaluator.metrics.predictive.compute_monthly_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L223)；`quant_evaluator.metrics.predictive.compute_monthly_rank_ic`。
 
 <a id="metric-neutralized_rank_ic"></a>
 ## neutralized_rank_ic — Neutralized Rank IC
@@ -2589,7 +2607,7 @@ PG_f=R_f=\frac{v_f}{t_f}\quad\text{仅当 }|t_f|\ge\tau\text{ 且未触发近零
 $`t_f,v_f`$ 是因子 $`f`$ 的训练/验证预测维度证据，$`\tau=`$ RetentionPolicy.min_abs_train，反号保护使用 sign_flip_guard。任一端非有限记 insufficient_data，训练近零记 train_near_zero，保护触发记 sign_flip_guard；这些情形该因子结果均为 NaN/None。运行时 TrainVsValidationArtifact.parameter_generalization 直接保存 tuple(retentions)，注册 compute_fn 仅将该逐因子数组透传，绝不跨因子平均；底层 compute_validation_retention 的跨因子均值辅助结果不是此注册指标的公开输出。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4334)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4332)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-pearson_ic"></a>
 ## pearson_ic — Mean Pearson IC
@@ -2719,7 +2737,7 @@ s_f=\sqrt{(n_f-1)^{-1}\sum_{t\in V_f}(IC^P_{tf}-\bar{IC}^P_f)^2}
 | `valid_counts` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/ic.py#L677)；`quant_evaluator.metrics.ic.compute_ic_std`。
+实现核对：[函数定义](../metrics/ic.py#L691)；`quant_evaluator.metrics.ic.compute_ic_std`。
 
 <a id="metric-purity_ratio"></a>
 ## purity_ratio — Purity Ratio
@@ -2781,7 +2799,7 @@ S_f=|A_f|^{-1}\sum_{q\in A_f}|r_{q+1,f}-r_{q,f}|
 $`A_f`$ 仅含两端均有限的相邻对；无有效对为 NaN。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L156)；`quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L148)；`quant_evaluator.metrics.quantile_shape.compute_quantile_adjacent_spread`。
 
 <a id="metric-quantile_curvature"></a>
 ## quantile_curvature — Quantile Curvature
@@ -2808,7 +2826,7 @@ C_f=|I_f|^{-1}\sum_{q\in I_f}(r_{q+1,f}-2r_{q,f}+r_{q-1,f})
 仅连续三桶都有限的内部位置；至少 3 桶且有有效三元组，否则 NaN。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L93)；`quant_evaluator.metrics.quantile_shape.compute_quantile_curvature`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L85)；`quant_evaluator.metrics.quantile_shape.compute_quantile_curvature`。
 
 <a id="metric-quantile_extreme_cliff"></a>
 ## quantile_extreme_cliff — Quantile Extreme Cliff
@@ -2835,7 +2853,7 @@ E_f=[(r_Q-r_{Q-1})+(r_2-r_1)]/2
 顶部与底部两桶均须有限且至少 2 桶，否则 NaN。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L188)；`quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L180)；`quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff`。
 
 <a id="metric-quantile_monotonicity"></a>
 ## quantile_monotonicity — Adjacent Quantile Increase Fraction
@@ -3087,7 +3105,7 @@ QS_f=\mathrm{mean}_{t_1\lt t_2:\,\rho_{t_1,t_2}\ finite}\rho_{t_1,t_2}
 |---|---|
 | `min_periods` | `2` |
 
-实现核对：[函数定义](../registry/metrics.py#L1215)；`quant_evaluator.registry.metrics._bind_quantile_stability_value`。
+实现核对：[函数定义](../registry/metrics.py#L1213)；`quant_evaluator.registry.metrics._bind_quantile_stability_value`。
 
 <a id="metric-quantile_tail_asymmetry"></a>
 ## quantile_tail_asymmetry — Quantile Tail Asymmetry
@@ -3114,7 +3132,7 @@ A_f=(r_{Qf}-r_{mf})-(r_{mf}-r_{1f}),\quad m=\lfloor Q/2\rfloor+1
 实现以零基 Q//2 选中央桶；至少 3 桶且顶、底、中均有限，否则 NaN。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L133)；`quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L125)；`quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry`。
 
 <a id="metric-quarter_consistency"></a>
 ## quarter_consistency — Quarter Consistency
@@ -3180,7 +3198,7 @@ QIC_f=|G_f|^{-1}\sum_{g\in G_f}\bar{IC}^{rank}_{gf}
 | `min_periods` | `20` |
 | `time_index` | `None` |
 
-实现核对：[函数定义](../metrics/predictive.py#L192)；`quant_evaluator.metrics.predictive.compute_quarterly_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L234)；`quant_evaluator.metrics.predictive.compute_quarterly_rank_ic`。
 
 <a id="metric-rank_ic"></a>
 ## rank_ic — Mean Rank IC
@@ -3280,7 +3298,7 @@ a_h={\sum_{(t,t-h)\in P_h}(IC_t-\bar I_h^+)(IC_{t-h}-\bar I_h^-)\over\sqrt{\sum(
 | `horizons` | `(1, 5, 10, 20)` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L270)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
+实现核对：[函数定义](../metrics/predictive.py#L312)；`quant_evaluator.metrics.predictive.compute_rank_ic_decay`。
 
 <a id="metric-rank_ic_positive_ratio"></a>
 ## rank_ic_positive_ratio — Rank IC Positive Ratio
@@ -3310,7 +3328,7 @@ M={\sum_t\mathbf1(IC_t\gt 0,\ IC_t\ finite)\over\sum_t\mathbf1(IC_t\ finite)}
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L165)；`quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio`。
+实现核对：[函数定义](../metrics/predictive.py#L207)；`quant_evaluator.metrics.predictive.compute_rank_ic_positive_ratio`。
 
 <a id="metric-rank_ic_series"></a>
 ## rank_ic_series — Daily Rank IC Series
@@ -3432,7 +3450,7 @@ M={1\over n_W}\sum_{t\in\{T-251,\ldots,T\}\cap T^{\ast}}IC_t
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L241)；`quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L283)；`quant_evaluator.metrics.predictive.compute_recent_12m_rank_ic`。
 
 <a id="metric-recent_3m_rank_ic"></a>
 ## recent_3m_rank_ic — Recent 3-Month Rank IC
@@ -3462,7 +3480,7 @@ M={1\over n_W}\sum_{t\in\{T-62,\ldots,T\}\cap T^{\ast}}IC_t
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L227)；`quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L269)；`quant_evaluator.metrics.predictive.compute_recent_3m_rank_ic`。
 
 <a id="metric-recent_6m_rank_ic"></a>
 ## recent_6m_rank_ic — Recent 6-Month Rank IC
@@ -3492,7 +3510,7 @@ M={1\over n_W}\sum_{t\in\{T-125,\ldots,T\}\cap T^{\ast}}IC_t
 |---|---|
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L234)；`quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L276)；`quant_evaluator.metrics.predictive.compute_recent_6m_rank_ic`。
 
 <a id="metric-recent_degradation_score"></a>
 ## recent_degradation_score — Recent Degradation Score
@@ -3736,7 +3754,7 @@ C={\#\{(t,i):y_{t,i}\ finite\}\over\#\{(t,i):i\in U_t\}}
 | `forward_returns` | `None` |
 | `factor_values` | `None` |
 
-实现核对：[函数定义](../registry/metrics.py#L1254)；`quant_evaluator.registry.metrics._bind_return_coverage_value`。
+实现核对：[函数定义](../registry/metrics.py#L1252)；`quant_evaluator.registry.metrics._bind_return_coverage_value`。
 
 <a id="metric-return_skew"></a>
 ## return_skew — Return Skew
@@ -3845,7 +3863,7 @@ Rolling window IC values over time
 - 输出：`series`；单位：`correlation`；方向：`higher_is_better`。
 - 缺失政策：`nan`；数值政策：`finite`；注册最低期数：`None`。
 - 别名：无。
-- 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats`。
+- 增量模式：`PERIODIC_RECOMPUTE`；注册实现定位：`quant_evaluator.metrics.rolling_ic_mean.compute_rolling_ic_mean`。
 
 ### 数学公式与计算口径
 
@@ -3957,7 +3975,7 @@ IR_t={\mu_t\over s_t},\qquad M=\mathrm{mean}_{t:IR_t\ finite}IR_t
 | `window` | `60` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L215)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir`。
+实现核对：[函数定义](../metrics/predictive.py#L257)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_ir`。
 
 <a id="metric-rolling_rank_ic_mean"></a>
 ## rolling_rank_ic_mean — Rolling Rank IC Mean
@@ -3988,7 +4006,7 @@ Time-mean of the rolling-window mean rank IC, per factor. A smoother estimate of
 | `window` | `60` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../metrics/predictive.py#L203)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean`。
+实现核对：[函数定义](../metrics/predictive.py#L245)；`quant_evaluator.metrics.predictive.compute_rolling_rank_ic_mean`。
 
 <a id="metric-shape_bootstrap_confidence"></a>
 ## shape_bootstrap_confidence — Shape Bootstrap Rank Agreement (legacy ID)
@@ -4474,7 +4492,7 @@ C_{\rm top}=g_Q-g_{Q-1}
 至少2桶，最高两桶都有限，否则NaN。正值表示最高桶相对次高桶跳升。
 
 
-实现核对：[函数定义](../metrics/quantile_shape.py#L214)；`quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff`。
+实现核对：[函数定义](../metrics/quantile_shape.py#L206)；`quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff`。
 
 <a id="metric-top_quantile_cliff_robust"></a>
 ## top_quantile_cliff_robust — Top Quantile Cliff (Robust)
@@ -4621,7 +4639,7 @@ D_f^{\mathrm{train}}=A.\mathrm{train\_predictive\_dimension}_f
 这里 $`A`$ 为训练—验证证据制品，$`D`$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4166)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4164)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_icir_delta"></a>
 ## train_validation_icir_delta — Train-Validation ICIR Delta
@@ -4647,7 +4665,7 @@ Absolute ICIR delta (validation - train) per factor (plan §13.6). Delta, never 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4263)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4261)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_rankic_delta"></a>
 ## train_validation_rankic_delta — Train-Validation RankIC Delta
@@ -4673,7 +4691,7 @@ Absolute rank-IC delta (validation - train) per factor (plan §13.6). A DELTA, n
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4240)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4238)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_shape_delta"></a>
 ## train_validation_shape_delta — Train-Validation Shape Delta
@@ -4699,7 +4717,7 @@ Absolute shape-evidence delta (validation - train) per factor (plan §13.6). Del
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4309)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4307)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-train_validation_sharpe_delta"></a>
 ## train_validation_sharpe_delta — Train-Validation Sharpe Delta
@@ -4725,7 +4743,7 @@ Absolute long/short Sharpe delta (validation - train) per factor (plan §13.6). 
 这是验证减训练的**有符号差值**，不是取绝对值，也不是比率。任一侧非有限则NaN；接近零的训练值并不阻止计算差值。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4286)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4284)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-turnover"></a>
 ## turnover — Portfolio Turnover
@@ -4752,14 +4770,6 @@ w_{ti}=\frac{R_{ti}}{\sum_{j\in V_t}R_{tj}}\ (i\in V_t),\quad w_{ti}=0\ (i\notin
 
 
 $`D`$ 是两日权重均已知的相邻转换集合。任一日有限资产少于10个时整行权重未知，涉及该日的换手为NaN。默认 min_periods=2 是时间维门槛，因此至少1个有效相邻转换；它不降低截面至少10个有限资产的要求。它是排名代理权重的半L1换手，**不是 $`(1-\rho_S)/2`$，也不是真实成交额**。
-
-观测次数 `observation_counts["turnover"]` 同样只统计有效相邻转换，而不是仅有两个有限资产的日期数。设 $`V_t`$ 为同时满足因子 validity 与有限值条件的资产集合：
-
-```math
-D=\{t\in\{1,\ldots,T-1\}:|V_{t-1}|\ge10\ \land\ |V_t|\ge10\},\qquad n_{TO}=|D|.
-```
-
-例如四天均只有9只有效股票时，换手率为 NaN，观测次数为0；四天均有10只有效股票时，观测次数为3。CPU 与 CUDA 路径遵循相同门槛。
 
 ### 函数层默认参数
 
@@ -4805,7 +4815,7 @@ $`\tau_{t,f}`$ 为规范换手 $`\frac{1}{2}\sum_i|w_{t,i}-w_{t-1,i}|`$，权重
 | `turnover_series` | `None` |
 | `min_periods` | `20` |
 
-实现核对：[函数定义](../registry/metrics.py#L1273)；`quant_evaluator.registry.metrics._bind_turnover_adjusted_ic_value`。
+实现核对：[函数定义](../registry/metrics.py#L1271)；`quant_evaluator.registry.metrics._bind_turnover_adjusted_ic_value`。
 
 <a id="metric-turnover_cost"></a>
 ## turnover_cost — turnover_cost
@@ -4903,7 +4913,7 @@ $`n_f`$ 为有限期换手数；$`n_f\lt 2`$（`min_periods=2`）时为 NaN。�
 |---|---|
 | `min_periods` | `2` |
 
-实现核对：[函数定义](../registry/metrics.py#L1264)；`quant_evaluator.registry.metrics._bind_turnover_stability_value`。
+实现核对：[函数定义](../registry/metrics.py#L1262)；`quant_evaluator.registry.metrics._bind_turnover_stability_value`。
 
 <a id="metric-u_shape_score"></a>
 ## u_shape_score — U-Shape Score
@@ -4987,7 +4997,7 @@ D_f^{\mathrm{validation}}=A.\mathrm{validation\_predictive\_dimension}_f
 这里 $`A`$ 为训练—验证证据制品，$`D`$ 是显式绑定的预测维度（例如该分区的平均RankIC），并非“有效因子个数”。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4189)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4187)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-validation_retention"></a>
 ## validation_retention — Validation Retention
@@ -5016,7 +5026,7 @@ R_f=\begin{cases}b_f/a_f,&a_f,b_f\ \text{有限},\ |a_f|\ge\epsilon,\ \neg U_f,\
 默认版本化策略 $`\epsilon=0.05,g=0.5`$。该指标逐因子返回保留率，允许负值；不跨因子平均。记录分母接近零、符号保护或缺失原因；训练为零时不盲目相除。输入来自已授权、绑定相同因子ID/版本及指标实例的训练—验证制品；当前注册函数仅投影制品字段，不重新拟合。缺失字段为NaN，不可从密封测试集补造。
 
 
-实现核对：[函数定义](../registry/metrics.py#L4216)；`quant_evaluator.registry.metrics.<lambda>`。
+实现核对：[函数定义](../registry/metrics.py#L4214)；`quant_evaluator.registry.metrics.<lambda>`。
 
 <a id="metric-var_95"></a>
 ## var_95 — var_95
@@ -5358,7 +5368,7 @@ $`V_p`$ 为季度组中的有效日集合，结果是最差组的平均RankIC，
 | `min_periods` | `20` |
 | `time_index` | `None` |
 
-实现核对：[函数定义](../metrics/predictive.py#L259)；`quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L301)；`quant_evaluator.metrics.predictive.compute_worst_quarter_rank_ic`。
 
 <a id="metric-worst_rolling_21d"></a>
 ## worst_rolling_21d — Worst 21 trading periods (rolling)
@@ -5492,7 +5502,7 @@ $`V_p`$ 为年度组中的有效日集合，结果是最差组的平均RankIC，
 | `min_periods` | `20` |
 | `time_index` | `None` |
 
-实现核对：[函数定义](../metrics/predictive.py#L248)；`quant_evaluator.metrics.predictive.compute_worst_year_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L290)；`quant_evaluator.metrics.predictive.compute_worst_year_rank_ic`。
 
 <a id="metric-year_consistency"></a>
 ## year_consistency — Year Consistency
@@ -5556,7 +5566,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `min_periods` | `20` |
 | `time_index` | `None` |
 
-实现核对：[函数定义](../metrics/predictive.py#L170)；`quant_evaluator.metrics.predictive.compute_yearly_rank_ic`。
+实现核对：[函数定义](../metrics/predictive.py#L212)；`quant_evaluator.metrics.predictive.compute_yearly_rank_ic`。
 
 ## 实现核对索引（可选）
 
@@ -5570,6 +5580,9 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.calendar_returns._period_id](../metrics/calendar_returns.py#L95)
 - [quant_evaluator.metrics.calendar_returns._period_key](../metrics/calendar_returns.py#L87)
 - [quant_evaluator.metrics.calendar_returns._validated_returns](../metrics/calendar_returns.py#L26)
+- [quant_evaluator.metrics.correlation_endpoint._stored_scalar_fraction](../metrics/correlation_endpoint.py#L6)
+- [quant_evaluator.metrics.correlation_endpoint.certify_correlation_endpoint](../metrics/correlation_endpoint.py#L14)
+- [quant_evaluator.metrics.correlation_endpoint.certify_ic_panel_endpoints](../metrics/correlation_endpoint.py#L53)
 - [quant_evaluator.metrics.data_quality._factor_values](../metrics/data_quality.py#L37)
 - [quant_evaluator.metrics.data_quality._labels](../metrics/data_quality.py#L44)
 - [quant_evaluator.metrics.data_quality.compute_return_coverage](../metrics/data_quality.py#L239)
@@ -5585,14 +5598,14 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.exposure_evidence.build_factor_loading_series](../metrics/exposure_evidence.py#L366)
 - [quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence](../metrics/exposure_evidence.py#L496)
 - [quant_evaluator.metrics.finite_mean.finite_mean_axis0](../metrics/finite_mean.py#L11)
-- [quant_evaluator.metrics.ic._corrcoef_pair_1d](../metrics/ic.py#L34)
-- [quant_evaluator.metrics.ic._corrcoef_rank_last](../metrics/ic.py#L83)
-- [quant_evaluator.metrics.ic._pairwise_finite_mask](../metrics/ic.py#L20)
-- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L594)
-- [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L191)
-- [quant_evaluator.metrics.ic._stable_corrcoef_pair_1d](../metrics/ic.py#L733)
-- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L223)
-- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L617)
+- [quant_evaluator.metrics.ic._corrcoef_pair_1d](../metrics/ic.py#L35)
+- [quant_evaluator.metrics.ic._corrcoef_rank_last](../metrics/ic.py#L90)
+- [quant_evaluator.metrics.ic._pairwise_finite_mask](../metrics/ic.py#L21)
+- [quant_evaluator.metrics.ic._reject_boolean_ic_series](../metrics/ic.py#L608)
+- [quant_evaluator.metrics.ic._spearman_rank_correlation](../metrics/ic.py#L200)
+- [quant_evaluator.metrics.ic._stable_corrcoef_pair_1d](../metrics/ic.py#L747)
+- [quant_evaluator.metrics.ic.compute_daily_ic](../metrics/ic.py#L232)
+- [quant_evaluator.metrics.ic.compute_mean_ic](../metrics/ic.py#L631)
 - [quant_evaluator.metrics.ic_summary._check_min_periods](../metrics/ic_summary.py#L795)
 - [quant_evaluator.metrics.ic_summary._coerce_real_float_array](../metrics/ic_summary.py#L778)
 - [quant_evaluator.metrics.ic_summary._rolling_mean_nan](../metrics/ic_summary.py#L264)
@@ -5602,7 +5615,6 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.ic_summary.compute_ic_tstat](../metrics/ic_summary.py#L64)
 - [quant_evaluator.metrics.ic_summary.compute_icir](../metrics/ic_summary.py#L20)
 - [quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability](../metrics/ic_summary.py#L888)
-- [quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats](../metrics/ic_summary.py#L299)
 - [quant_evaluator.metrics.label_panel.normalize_label_panel](../metrics/label_panel.py#L11)
 - [quant_evaluator.metrics.long_only._matrix](../metrics/long_only.py#L8)
 - [quant_evaluator.metrics.multiple_testing._validate_alpha](../metrics/multiple_testing.py#L59)
@@ -5612,14 +5624,14 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.portfolio_stats._rolling_sharpe_per_window](../metrics/portfolio_stats.py#L1123)
 - [quant_evaluator.metrics.portfolio_stats._validate_missing_return_policy](../metrics/portfolio_stats.py#L198)
 - [quant_evaluator.metrics.portfolio_stats.equal_gross_weights](../metrics/portfolio_stats.py#L133)
-- [quant_evaluator.metrics.predictive._as_series](../metrics/predictive.py#L43)
-- [quant_evaluator.metrics.predictive._autocorr_lag](../metrics/predictive.py#L132)
-- [quant_evaluator.metrics.predictive._mean_of_period_means](../metrics/predictive.py#L91)
-- [quant_evaluator.metrics.predictive._period_means](../metrics/predictive.py#L55)
-- [quant_evaluator.metrics.predictive._recent_mean](../metrics/predictive.py#L103)
-- [quant_evaluator.metrics.predictive._rolling_mean_ir](../metrics/predictive.py#L109)
-- [quant_evaluator.metrics.predictive._valid_counts](../metrics/predictive.py#L51)
-- [quant_evaluator.metrics.predictive._worst_period](../metrics/predictive.py#L97)
+- [quant_evaluator.metrics.predictive._as_series](../metrics/predictive.py#L44)
+- [quant_evaluator.metrics.predictive._autocorr_lag](../metrics/predictive.py#L167)
+- [quant_evaluator.metrics.predictive._mean_of_period_means](../metrics/predictive.py#L92)
+- [quant_evaluator.metrics.predictive._period_means](../metrics/predictive.py#L56)
+- [quant_evaluator.metrics.predictive._recent_mean](../metrics/predictive.py#L104)
+- [quant_evaluator.metrics.predictive._rolling_mean_ir](../metrics/predictive.py#L110)
+- [quant_evaluator.metrics.predictive._valid_counts](../metrics/predictive.py#L52)
+- [quant_evaluator.metrics.predictive._worst_period](../metrics/predictive.py#L98)
 - [quant_evaluator.metrics.quality._valid_pair_mask](../metrics/quality.py#L17)
 - [quant_evaluator.metrics.quality.compute_coverage_per_factor](../metrics/quality.py#L94)
 - [quant_evaluator.metrics.quality.compute_per_time_coverage](../metrics/quality.py#L157)
@@ -5636,6 +5648,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.quantile_numeric.repair_bucket_means](../metrics/quantile_numeric.py#L53)
 - [quant_evaluator.metrics.quantile_numeric.repair_quantile_panel](../metrics/quantile_numeric.py#L78)
 - [quant_evaluator.metrics.quantile_numeric.stable_finite_mean](../metrics/quantile_numeric.py#L42)
+- [quant_evaluator.metrics.quantile_rank_numeric.rank_monotonicity](../metrics/quantile_rank_numeric.py#L18)
 - [quant_evaluator.metrics.quantile_shape._as_matrix](../metrics/quantile_shape.py#L35)
 - [quant_evaluator.metrics.quantile_shape._finite_columns](../metrics/quantile_shape.py#L43)
 - [quant_evaluator.metrics.registry_adapters._daily_quantile_input_binding](../metrics/registry_adapters.py#L32)
@@ -5657,6 +5670,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 - [quant_evaluator.metrics.robustness.compute_hac_variance](../metrics/robustness.py#L123)
 - [quant_evaluator.metrics.robustness.compute_subsample_ic](../metrics/robustness.py#L13)
 - [quant_evaluator.metrics.robustness.compute_subsample_ic_std](../metrics/robustness.py#L61)
+- [quant_evaluator.metrics.rolling_ic_mean.compute_rolling_ic_mean](../metrics/rolling_ic_mean.py#L9)
 - [quant_evaluator.metrics.rolling_sharpe_moments.conditioned_window_moments](../metrics/rolling_sharpe_moments.py#L8)
 - [quant_evaluator.metrics.rolling_window_constancy.finite_constant_windows](../metrics/rolling_window_constancy.py#L7)
 - [quant_evaluator.metrics.shape_evidence._as_matrix](../metrics/shape_evidence.py#L78)
@@ -5711,6 +5725,9 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.calendar_returns.compute_worst_calendar_quarter` | `d790b2f450f10fef0c91627eaad33b7a5caa4bdb696dc864b30a9c16c2b19c27` |
 | `quant_evaluator.metrics.calendar_returns.compute_worst_calendar_year` | `59d3cb3c82cb94d89ac77ae00b04e13c0e9ea4b1616d7e43f432f13e4868bc35` |
 | `quant_evaluator.metrics.calendar_returns.compute_worst_rolling_return` | `8355bf5944bbf7b7936ad0acc3c98b04041779c86235b5bea362ad43338db60e` |
+| `quant_evaluator.metrics.correlation_endpoint._stored_scalar_fraction` | `d471b1a1d98448c129eedee3e21f3654a06ebac73832e8617215b7163d2c3beb` |
+| `quant_evaluator.metrics.correlation_endpoint.certify_correlation_endpoint` | `edd758344f95b24ae69875213335d44a7caf425601a7a742fed748921e5eff10` |
+| `quant_evaluator.metrics.correlation_endpoint.certify_ic_panel_endpoints` | `1cb6a9f0eddd07ed59ae723ef280dd2f094be7b7f496b4d95fa8c5a4fc51bd56` |
 | `quant_evaluator.metrics.data_quality._factor_values` | `28f6a3ae67a896a9cac8bc5d6829e106d9dfae4c85062308a9375fbc874d0242` |
 | `quant_evaluator.metrics.data_quality._labels` | `befd306e8fde4bf86790eb60eb778bd4778f51a4c97478f7498c527c02a1dd04` |
 | `quant_evaluator.metrics.data_quality.compute_cross_section_cardinality` | `c246630d68f9e60c73618b46b3cac8a5d3b45e7239c733f4b0c081472d895ac7` |
@@ -5748,13 +5765,13 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.exposure_evidence.compute_style_exposure_evidence` | `8489b5d105ac339a1566602ef60c35d2c92f2a29fd6dc4523f8aa228413b53d5` |
 | `quant_evaluator.metrics.exposure_evidence.compute_volatility_exposure` | `c686f6a4b47075a132e79caf213143e227212a0af63392513a8707727fc9a8e5` |
 | `quant_evaluator.metrics.finite_mean.finite_mean_axis0` | `d77f0e5327d728fda45a9bf2f7cbc12f7f23485bfab779bd207cb5d9851db31d` |
-| `quant_evaluator.metrics.ic._corrcoef_pair_1d` | `79265ef88b901dd54178a0e590122df75d6f6b3b5d82a644fc9237a728312866` |
-| `quant_evaluator.metrics.ic._corrcoef_rank_last` | `ab983f6d7970d5073d5a90797551547e118b9e4dc20474ae11545a28e10d1e86` |
+| `quant_evaluator.metrics.ic._corrcoef_pair_1d` | `664b188fe0aa47a9e811b5938e631b7b7e9e461705d751918202e2f449a97307` |
+| `quant_evaluator.metrics.ic._corrcoef_rank_last` | `ee8ad3151aab24792589af0b6a2385554f7011b2fac633b674d790a3e72444c7` |
 | `quant_evaluator.metrics.ic._pairwise_finite_mask` | `f9943a8e1f717199085d02df95c5f4b86ed466fc0c1b28bc381e83daec72a4b5` |
 | `quant_evaluator.metrics.ic._reject_boolean_ic_series` | `906995c840d5cdbe79ea225fbc3f6fe61253d993e24ddc92643accdbea08b3ec` |
-| `quant_evaluator.metrics.ic._spearman_rank_correlation` | `4e9ef965007cf5bbd49a0f7b4cba971ef6d41f351b3f57ac49c7bb7817dcb532` |
+| `quant_evaluator.metrics.ic._spearman_rank_correlation` | `4a7e48afe5985c17fbbbcaa21521420f835b24e047067cde4676bcf1e712c370` |
 | `quant_evaluator.metrics.ic._stable_corrcoef_pair_1d` | `3ef8a802acc7fd318ea12a831393939bd0f0de727047a07301e683d03aac4da3` |
-| `quant_evaluator.metrics.ic.compute_daily_ic` | `959e8fa6c01b1cd51cbc05e2099b4ec37eab191b174db094e2ee26b1db2d0041` |
+| `quant_evaluator.metrics.ic.compute_daily_ic` | `b208f4793e328a770201005a24dc5dbcd566b01c622fecc9b9a55e35ba48f2f0` |
 | `quant_evaluator.metrics.ic.compute_ic_std` | `d61c306ec97b6b117ccf93933512552e29fc881140f1cfe8dbfcd8b7c1013f37` |
 | `quant_evaluator.metrics.ic.compute_mean_ic` | `eaf6b80b8bfe3b7dae1838c5fece7d7f12d7057c102102b5286d0cadbd4e5c85` |
 | `quant_evaluator.metrics.ic.compute_mean_ic_value` | `8c8639913d4d91672fadd341f7c84a23911faaeabce313ca136956f0ba925627` |
@@ -5768,7 +5785,6 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.ic_summary.compute_ic_tstat` | `4030de7efc4657648c06150d75d773bd62fd5573417ae2fa49cc649eceb1ccd9` |
 | `quant_evaluator.metrics.ic_summary.compute_icir` | `513cc3fda0d2c2b9d8a7deab8a7c77b093882be51950b96148e9e6bfa8d110b6` |
 | `quant_evaluator.metrics.ic_summary.compute_quantile_rank_stability` | `f8547f665db427409c327dba4d785ba0eb66dede463c2e8dbdfbcaea8606a317` |
-| `quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats` | `7cb4e7572dcb99e4fc3f060237b531974d0a89bced5304d881e4ca373e7a2541` |
 | `quant_evaluator.metrics.label_panel.normalize_label_panel` | `623ee37a5bf5de87790a0475178e8df0469437a3dd9c41c0f3b0859b5d3f1600` |
 | `quant_evaluator.metrics.long_only._matrix` | `24d9629100c137f5690085ad6f2cf805bb10fd4d6aa17e7f341041ee8a02dbdc` |
 | `quant_evaluator.metrics.long_only.compute_information_ratio` | `86e342c72efeb769d8737f1eb9aa215d844163c6e8ad50cb94791271cf375cfb` |
@@ -5793,11 +5809,11 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.portfolio_stats.compute_win_rate` | `e7b0cd50717a8af9ed1ad2246f768ac5ea20e2b1ba29053f931c289c86d622a3` |
 | `quant_evaluator.metrics.portfolio_stats.equal_gross_weights` | `bd21f497ac7f3bb3bab5b8e949cd5cc84b71d231f1897a4361d53d7efd12f3ce` |
 | `quant_evaluator.metrics.predictive._as_series` | `64761316903f12723e1e1942e0a28a2f60e8ddabbeb12a26ab9b1be4250ea939` |
-| `quant_evaluator.metrics.predictive._autocorr_lag` | `381e58a6c532930a2ef3eb3107ffd50f859049d8f5c8546f5e2cce96973bf5ee` |
+| `quant_evaluator.metrics.predictive._autocorr_lag` | `a980018a397dba942aa33894a380774f700f86799872c19716f54e885c2c7fdd` |
 | `quant_evaluator.metrics.predictive._mean_of_period_means` | `35de9030a191f3f42a0b9560d016372b97e134b38ecb42f35d60c80c0954ecef` |
 | `quant_evaluator.metrics.predictive._period_means` | `2ac2dc6168281d9047c50d37e294a38753d00855a10f03f51ec573e51c8adc32` |
 | `quant_evaluator.metrics.predictive._recent_mean` | `e92755ae21393c79fa146f5417f139093f010d20051ae00db32a79b3627b17fd` |
-| `quant_evaluator.metrics.predictive._rolling_mean_ir` | `5e185e60888241ef7285402627ba2e1319bbfd7dc1d1aa4b26be2d8f933a1264` |
+| `quant_evaluator.metrics.predictive._rolling_mean_ir` | `4af10dfe25944f5cb0e710d5753fe73df47b202e42c392eb17ea79de9f92dd37` |
 | `quant_evaluator.metrics.predictive._valid_counts` | `29c09f90d2517d4a0958fdb169b0880169f5038032c652e7f4ae8e0214c9e024` |
 | `quant_evaluator.metrics.predictive._worst_period` | `4138a74f4a2f93b40232fbb693b92b662a83afa1beb34e6597124ef2603bd92b` |
 | `quant_evaluator.metrics.predictive.compute_ic_positive_ratio` | `4109cbac42e8e932b32f97ac72d6f34213b5890f22a7585da25e70f6e66c42a0` |
@@ -5831,6 +5847,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.quantile_numeric.repair_bucket_means` | `8e420ac4124249ffb361f33eaca6ed577eb2412388c9e537e13a41bcfcce8070` |
 | `quant_evaluator.metrics.quantile_numeric.repair_quantile_panel` | `e3496dd65b7c9b39630dddf6faf4983267bdd7058f7c1b98cdfce8d18091f79b` |
 | `quant_evaluator.metrics.quantile_numeric.stable_finite_mean` | `90dc7452accc295fff76df577214865cf0b87055a088984ae60a322eeb988112` |
+| `quant_evaluator.metrics.quantile_rank_numeric.rank_monotonicity` | `38c75305f49498bf5bb540ed4787d7e7bc2b5c1f12b8945256ee511a7c65009a` |
 | `quant_evaluator.metrics.quantile_shape._as_matrix` | `179ebe17a5e5133b07c132e0131404c618b147f4c4d032d2197f0855e4e76aa5` |
 | `quant_evaluator.metrics.quantile_shape._finite_columns` | `f61eb31021df766312ed7f37577bae6ab43d39ad9ca792d5610fc124dd905318` |
 | `quant_evaluator.metrics.quantile_shape.compute_bottom_quantile_cliff` | `0b40b984ac7ea403eb251e3ccdba3d6e1441224dfd9b5dff51c763abf734454d` |
@@ -5838,7 +5855,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.quantile_shape.compute_quantile_curvature` | `6547ea984fdde5aa206e7851aedf952b4947eb4613435016e2402dd709f4d7fc` |
 | `quant_evaluator.metrics.quantile_shape.compute_quantile_extreme_cliff` | `950cc77dc71098d399420958f79e7e86634e214a283744a6392ec70d33addba7` |
 | `quant_evaluator.metrics.quantile_shape.compute_quantile_monotonicity` | `24f10583948698c67ca7eb1a85056a098e3ed73a17628e91e89dd8cf75d9cb73` |
-| `quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity` | `55b187be9ed79752514f5a376b6b519dc9a89e758750c02eb4885543d7eb57d2` |
+| `quant_evaluator.metrics.quantile_shape.compute_quantile_rank_monotonicity` | `0a8fa5427df6b7fcca48831d09ebf6ac0690065a825d7965180d20ffb20a56ad` |
 | `quant_evaluator.metrics.quantile_shape.compute_quantile_tail_asymmetry` | `cc5a4f748e7167cc1835350a95659c4f4b14d773c785406a87d1c9bfc34ec1d2` |
 | `quant_evaluator.metrics.quantile_shape.compute_top_quantile_cliff` | `e29f976aa497c906af1f0d5c8c295dabefc55365edd4f5d4b46587d200efa278` |
 | `quant_evaluator.metrics.registry_adapters._daily_quantile_input_binding` | `f88fe593bf592348d51c5a3c6cf90e542bb16c1464d73d76ad8055d35a075487` |
@@ -5883,6 +5900,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.metrics.robustness.compute_hac_variance` | `48f6545852f5228d681caf534938deeeeba50baf7d99f46000685f3e34596824` |
 | `quant_evaluator.metrics.robustness.compute_subsample_ic` | `a360bcd41a10fdad30b2cf37d948fe1b10a1881d1fcf122d173f3802af0411be` |
 | `quant_evaluator.metrics.robustness.compute_subsample_ic_std` | `548c9d1de546f6cc886e106fbec094b00b42ee00b383e0641e2b587ab13451d8` |
+| `quant_evaluator.metrics.rolling_ic_mean.compute_rolling_ic_mean` | `70508a77b90d1585695880ab2f711d79a4eb2b34ae6cdb0c86189041f49251cb` |
 | `quant_evaluator.metrics.rolling_sharpe_moments.conditioned_window_moments` | `db1a81c71b1dff2170a0c2ef8c6601956f6ede4cc124da64c9436bbc26536a50` |
 | `quant_evaluator.metrics.rolling_window_constancy.finite_constant_windows` | `628fe6d1ef9c000c3f8b7558a96df575f6d8cd2c7cfb6d2b370caaf5c8567647` |
 | `quant_evaluator.metrics.shape_evidence._as_matrix` | `179ebe17a5e5133b07c132e0131404c618b147f4c4d032d2197f0855e4e76aa5` |
@@ -5964,7 +5982,7 @@ Mean of the per-year mean rank IC, per factor. A robust annual average that down
 | `quant_evaluator.registry.metrics._bind_kurtosis_value` | `92bab7a6b82d46ec61ad94f56e276f5ed6819cafa7c8c8cbfd2aca6f4f7d5793` |
 | `quant_evaluator.registry.metrics._bind_quantile_stability_value` | `9040947b223331439f02d736f27a9621e04c5cf8ee305d0019abfeef98bd65fe` |
 | `quant_evaluator.registry.metrics._bind_return_coverage_value` | `92227b988266f05d0de282c815a97dbc04fc59d58b4a9b991cfda98f91ba6a85` |
-| `quant_evaluator.registry.metrics._bind_rolling_ic_value` | `49e9d9a230a1bb79d1044a18961cb8f01b35ad4b881fef810a88bc671e4ed109` |
+| `quant_evaluator.registry.metrics._bind_rolling_ic_value` | `a74b9ddc882074f87219c4ab30542395b081a7af0ab2fbc8a4310d7d34ff2fb6` |
 | `quant_evaluator.registry.metrics._bind_skewness_value` | `d5d1116c850f3a896dcc8cd4673de3929db1fb3221c743602fe0c540f1966e53` |
 | `quant_evaluator.registry.metrics._bind_turnover_adjusted_ic_value` | `bbf49dbbcd5f375c0e8f124b376d54d2b8ee75c08c42eba2f92015826b78bcb8` |
 | `quant_evaluator.registry.metrics._bind_turnover_stability_value` | `5a3db1e91f5bc41c7ef377c41ae73c86c8f0a3171325991feabeaedf1ed875a6` |

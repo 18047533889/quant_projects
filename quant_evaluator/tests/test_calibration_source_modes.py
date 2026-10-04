@@ -26,6 +26,10 @@ def test_modes_share_identity_without_false_source_drift(harness, source_tree):
     guarded = replace(policy, source_check_mode="stat_guarded")
     first = run(current_policy=guarded)
     assert first.metadata["source_check"]["files_hashed"] == 1
+    assert first.metadata["source_check_initial"]["files_hashed"] == 1
+    assert first.metadata["source_check_final"]["files_hashed"] == 0
+    assert first.metadata["source_check"]["bytes_hashed"] == len(b"VALUE = 1\n")
+    assert first.metadata["source_check_final"]["bytes_hashed"] == 0
     assert run(current_policy=policy).metadata["status"] == "calibrated"
     repeat = run(current_policy=guarded)
     assert repeat.metadata["status"] == "cache_hit"

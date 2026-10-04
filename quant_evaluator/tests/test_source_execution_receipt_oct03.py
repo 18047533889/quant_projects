@@ -29,6 +29,7 @@ def _run(monkeypatch, *, width=4, cap=5, oom=0, reads=None, count=2):
         return SimpleNamespace(metadata={
             "backend_used": "cuda", "effective_max_tile_size": cap,
             "factor_tile_size": width, "oom_retries": oom,
+            "source_auto_policy": kwargs["source_auto_policy"],
             "factor_tiles_processed": count,
             "source_request_fingerprint": "2" * 64,
         }, observation_counts={})
