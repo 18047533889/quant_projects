@@ -1,5 +1,22 @@
 # 优化库自动研究入口与方法公式（2026-09-22 更新）
 
+## 移动块 bootstrap 的模块化加速（2026-10-04）
+
+验证下界现在通过 `factor_optimizer.research_bootstrap.moving_block_lower_bound` 计算；原 `_lower_bound` 保留薄包装，baseline 与候选调用位置不变。设有效块长 L=max(config.block_length, int(horizon))、时间序列长度 n、每轮块数 K=ceil(n/L)。不足三块时返回 None；每轮仍按原 seed 与同一 `rng.integers(0,n-L+1,size=K)` 抽取起点。
+
+向量化构造索引 `I[j,k]=starts[j]+k`，按块顺序展开并截取前 n 个位置，再用 `np.take` 填入复用缓冲。非有限值仍占据时间位置，抽样后才剔除；每轮有限样本不足 minimum_validation_days 时返回 None。保持原输入 dtype、原 NumPy mean 顺序与分位数：
+
+$$\hat\mu_b=\operatorname{mean}\{d_{I_b[i]}:i<n,\operatorname{finite}(d_{I_b[i]})\},\qquad LB=Q_{(1-c)/2}(\hat\mu_1,\ldots,\hat\mu_B).$$
+
+没有用前缀和或改变归约顺序，避免大数抵消导致阈值附近选择改变。索引缓冲至多 n+L 个 intp，样本缓冲 n 个原 dtype 数值，仅留存 B 个 bootstrap 均值；空间 O(n+B)，不是 B×n 面板。单函数不替代批量入口的内存准入，直接调用者应自行限制输入规模。
+
+逐值回归覆盖残块、horizon 大于配置块长、NaN/±Inf 日期位置、有限样本不足、固定 seed、float32/int64 及抵消敏感值：34 passed。接入后与留出集/内存边界合跑 45 passed（2.05 秒）。根窗口独立三轮 ABBA（旧、新、新、旧；2500 天、499 抽样、L=5）每次结果精确一致；旧中位 0.087527 秒，新 0.012848 秒，约 6.81 倍。该结果只针对 bootstrap 子步骤，不等于整批因子评估提高同样倍数。
+
+曾测试逐块 Python 拷贝复用缓冲，反而慢约 1.7 倍，已弃用；当前选择的是已安装并测过的向量化索引方案，不以“少分配”代替速度证据。
+
+扩大到批量主入口、切分边界、留出集、输出所有权与上述 bootstrap 测试：79 passed、3 warnings（63.93 秒）。警告为 FE 既有物理实现说明缺项，不隐藏或视作已治理；此结果仍不覆盖全平台、全指标或真实因子盈利能力。
+
+
 ## 批量优化的内存准入（2026-10-04）
 
 `optimize_factor_batch` 在输入轴一致性校验后、时间切分/诊断/完整输出分配前检查额外工作集预算。设 T 为时间数、N 为资产数、F 为因子数、B 为 `bootstrap_draws`：

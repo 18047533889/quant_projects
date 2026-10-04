@@ -460,21 +460,16 @@ def _specs(config):
 
 
 def _lower_bound(differences, config, horizon):
-    # Moving blocks preserve within-block dependence and missing-date positions.
-    length = max(config.block_length, int(horizon))
-    n = len(differences)
-    if n < 3 * length:
-        return None
-    rng = np.random.default_rng(config.seed)
-    draws = []
-    for _ in range(config.bootstrap_draws):
-        starts = rng.integers(0, n-length+1, size=math.ceil(n/length))
-        values = np.concatenate([differences[s:s+length] for s in starts])[:n]
-        values = values[np.isfinite(values)]
-        if len(values) < config.minimum_validation_days:
-            return None
-        draws.append(float(values.mean()))
-    return float(np.quantile(draws, (1-config.confidence_level)/2))
+    from factor_optimizer.research_bootstrap import moving_block_lower_bound
+    return moving_block_lower_bound(
+        differences,
+        block_length=config.block_length,
+        horizon=int(horizon),
+        minimum_validation_days=config.minimum_validation_days,
+        bootstrap_draws=config.bootstrap_draws,
+        seed=config.seed,
+        confidence_level=config.confidence_level,
+    )
 
 
 def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
