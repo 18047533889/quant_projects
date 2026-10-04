@@ -129,6 +129,30 @@ def configure_source_qualification_provider(
         _configured_provider = provider
 
 
+def configure_source_qualification_provider_if_absent(provider: FileSourceQualificationProvider) -> bool:
+    """Atomically claim an empty slot without replacing another caller."""
+    if type(provider) is not FileSourceQualificationProvider:
+        raise TypeError("provider_invalid")
+    global _configured_provider
+    with _lock:
+        if _configured_provider is not None:
+            return False
+        _configured_provider = provider
+        return True
+
+
+def clear_source_qualification_provider_if_current(provider: FileSourceQualificationProvider) -> bool:
+    """Atomically release only the slot owned by this exact provider."""
+    if type(provider) is not FileSourceQualificationProvider:
+        raise TypeError("provider_invalid")
+    global _configured_provider
+    with _lock:
+        if _configured_provider is not provider:
+            return False
+        _configured_provider = None
+        return True
+
+
 def get_source_qualification_provider() -> FileSourceQualificationProvider | None:
     with _lock:
         return _configured_provider
@@ -155,5 +179,7 @@ __all__ = (
     "FileSourceQualificationProvider", "SourceQualificationCandidate",
     "SourceQualificationLookup", "clear_source_qualification_provider",
     "configure_source_qualification_provider", "get_source_qualification_provider",
+    "configure_source_qualification_provider_if_absent",
+    "clear_source_qualification_provider_if_current",
     "lookup_source_qualification_candidate",
 )
