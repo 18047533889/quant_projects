@@ -1,6 +1,6 @@
 # QE 完整回归审查记录（2026-10-04）
 
-最新独立完整回归：6643 passed, 26 skipped, 81 warnings，223.49 秒，退出码 0。命令为 `.venv/bin/python -m pytest -q quant_evaluator/tests --tb=short`，OPENBLAS_NUM_THREADS=1、OMP_NUM_THREADS=1。测试期间 QE 源码与测试冻结；仅出版已有工作树内容，未新增源修改。下文 27 个失败及“尚未闭合”列表是此前排查过程的历史记录，当前剩余事项以文末为准。
+首轮稳定完整回归：6643 passed, 26 skipped, 81 warnings，223.49 秒，退出码 0。命令为 `.venv/bin/python -m pytest -q quant_evaluator/tests --tb=short`，OPENBLAS_NUM_THREADS=1、OMP_NUM_THREADS=1。之后新增标量精度修复的完整回归为 6649 passed、1 failed（仅生成文档），该项已重新生成并定向复测通过；具体原始结果与后续真实标签接线证据见文末。下文 27 个失败及“尚未闭合”列表是此前排查过程的历史记录，当前剩余事项以文末为准。
 
 这不是所有输入永无 bug 的证明，也不是 COS/F61 的性能资格证明。
 
@@ -104,3 +104,4 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q quant_eva
 - peer 用既有严格 axis reader 核验真实轴索引：2588 日期、5461 股票、61 因子，manifest/checksum 一致。既有 load_labels 的注册 t/t+1/t+2 价格口径裁掉尾部两日，资格协议所需 2586 是对齐后的日期数。producer/provider 原先在标签对齐前比较 2586，会阻止真实请求。
 - producer 新测试实际 4 failed、2 passed（0.60 秒）；共享 source_f61_axis_admission 仅接受日期数 schema.T 到 schema.T+2、资产与因子数严格匹配，标签加载后仍要求完全相同的 schema.shape。原始 source_rows 对象与校验记录保持不变，没有伪造或裁切原始 receipts。
 - 首次修复后的两项测试因误用 SourceProfileReport.request_shape 报 AttributeError，测试改为该 typed API 的 records[0].context.request_shape 后，六项 raw-axis 测试 6 passed（0.52 秒），producer/CLI/四臂 warmup 27 passed（1.68 秒）。前后类型接口误用属于测试检查代码，不计为生产修复。尚未读取真实标签或运行真实 F61 性能资格，不能将编排 mock 的绿色等同为真实 qualification。
+- 后续 root 真实 label-only（session53645）退出码 0：在现有 research 环境中通过 manifest/axis index 严格读取，raw shape=(2588,5461,61)，调用注册 DataAccess 的真实 calendar/AdjVwap 得 aligned shape=(2586,5461,61)，标签构造耗时 23.178982716985047 秒，有限标签数 10928630。使用原配置，不改轴索引/收益口径。该检查没有调用因子评估或 GPU，不是 F61 oracle/ABBA/auto 资格，数据接线与性能验收明确分开。
