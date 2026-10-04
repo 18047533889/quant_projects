@@ -96,8 +96,8 @@ from quant_evaluator.metrics.ic_summary import (
     compute_ic_stability_scalar,
     compute_ic_summary_stats,
     compute_quantile_rank_stability,
-    compute_rolling_ic_stats,
 )
+from quant_evaluator.metrics.rolling_ic_mean import compute_rolling_ic_mean
 from quant_evaluator.metrics.data_quality import compute_return_coverage
 from quant_evaluator.metrics.turnover import (
     compute_turnover_adjusted_ic_from_series,
@@ -1153,10 +1153,8 @@ def _bind_drawdown_duration_value(returns, min_periods: int = 10):
 def _bind_rolling_ic_value(ic_series, window: int = 60, min_periods: int = 20):
     """Legacy ``rolling_ic``: rolling-window mean IC
     ``mu_t = mean(IC_{max(0,t-w+1)..t})`` — the documented ``rolling_ic_mean``
-    field of metrics.ic_summary.compute_rolling_ic_stats."""
-    return compute_rolling_ic_stats(
-        ic_series, window=window, min_periods=min_periods
-    )["rolling_ic_mean"]
+    computed without the unrelated rich IC statistics."""
+    return compute_rolling_ic_mean(ic_series, window=window, min_periods=min_periods)
 
 
 def _bind_factor_coverage_value(factor_batch):
@@ -1795,7 +1793,7 @@ _REGISTRY.register(MetricSpec(
     metric_id="rolling_ic",
     required_inputs={"factor", "forward_returns"},
     output_type="timeseries",
-    implementation_id="quant_evaluator.metrics.ic_summary.compute_rolling_ic_stats",
+    implementation_id="quant_evaluator.metrics.rolling_ic_mean.compute_rolling_ic_mean",
     metric_version="1.0.0",
     required_axes=("time",),
     units="correlation",
