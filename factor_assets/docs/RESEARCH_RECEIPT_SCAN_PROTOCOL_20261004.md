@@ -18,6 +18,9 @@ authenticate model execution or prove economic usefulness.
 
 ## Input and pairing
 
+The outer container must be an exact built-in tuple or list. Container subclasses
+are rejected before iteration: overridden length/iteration could otherwise bypass
+the cohort admission cap or materialize an unbounded input.
 Supply 2–16 exact ResearchFeatureReceipt objects with unique factor IDs, finite
 nonzero equal-width embeddings, identical specification/model version,
 manifest URI/digest, time/asset coordinate hashes and array shape. Status stays
@@ -80,6 +83,11 @@ report test failed on the absent receipt hashes (1.26 seconds) and the identical
 test passed after adding the fields (1.25 seconds). The final expanded protocol,
 member-scan, extreme-vector, sample-size and receipt suites passed 117 tests in
 1.93 seconds. No real-data throughput or total-memory measurement was run.
+
+A subsequent container-admission review found that tuple/list subclasses could
+lie about length or supply custom iterators. Two bounded rejection tests first
+failed (1.42 seconds), then passed with the identical command (1.13 seconds).
+The complete protocol suite passed 30 tests in 1.24 seconds after the fix.
 
 ## Memory limits
 

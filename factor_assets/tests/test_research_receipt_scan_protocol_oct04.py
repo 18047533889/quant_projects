@@ -14,6 +14,32 @@ from quant_evaluator.contracts.array_identity import authoritative_array_hash
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
 
 
+@pytest.mark.parametrize("container_type", [list, tuple])
+def test_scan_audit_rejects_custom_receipt_container_before_iteration(container_type):
+    # Custom iterators can lie about len and defeat the receipt admission cap.
+    consumed = []
+
+    class MisleadingContainer(container_type):
+        def __len__(self):
+            return 2
+
+        def __iter__(self):
+            consumed.append(True)
+            yield from super().__iter__()
+
+    receipts = _receipts(((1.0, 0.0), (0.0, 1.0), (1.0, 0.0)))
+    with pytest.raises(TypeError):
+        _run(MisleadingContainer(receipts))
+    assert consumed == [], "admission must reject custom iterators before consuming them"
+
+def test_scan_audit_accepts_exact_list_receipt_container():
+    receipts = _receipts(((1.0, 0.0), (0.0, 1.0), (1.0, 0.0)))
+    report = _run(list(receipts))
+    assert report["receipt_ids"] == ["factor-0", "factor-1", "factor-2"]
+    assert report["member_ids"] == ["factor-0", "factor-1"]
+    assert report["query_ids"] == ["factor-2"]
+    assert report["winner_ids"] == ["factor-0"]
+
 AUDIT_MODULE = "factor_assets.scripts.audit_research_receipt_scan_oct04"
 
 

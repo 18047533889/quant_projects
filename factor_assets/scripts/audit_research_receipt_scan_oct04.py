@@ -94,8 +94,9 @@ def _guarded_call(receipts, baseline, function):
 
 
 def _validate_receipts(receipts) -> tuple[tuple[ResearchFeatureReceipt, ...], list[str]]:
-    if not isinstance(receipts, (tuple, list)):
-        raise TypeError("receipts must be a tuple or list")
+    # Subclasses may override length/iteration and defeat bounded admission.
+    if type(receipts) not in (tuple, list):
+        raise TypeError("receipts must be an exact tuple or list")
     if not 2 <= len(receipts) <= _MAX_RECEIPTS:
         raise ValueError("audit requires 2..16 receipts")
     receipts = tuple(receipts)
