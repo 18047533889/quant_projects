@@ -1,5 +1,37 @@
 # 优化库自动研究入口与方法公式（2026-09-22 更新）
 
+## FE 变换后端：公开选项与当前资格（2026-10-04）
+
+当前 `BatchOptimizationConfig` 与 `optimize_factor_batch` **没有 FE 变换后端选择参数**。
+不要向这个入口传入 `backend="polars_long"` 或 `backend="auto"`：这些不是现有 FO 参数。
+QE 评估调用中的 `backend="cpu"` 控制评分计算，不控制候选变换；FE factory 的
+`polars_long` / `polars_native` / `long_polars` / `auto_long` 也不是 FO 批量入口的选项。
+
+目前已经接入的值变换按所属库的 adapter 执行，并非全部走 FP 或全部走 Polars：
+
+| 变换 | 当前执行路由 |
+|---|---|
+| 横截面 average-tie rank | FE canonical `rank`，`pandas_numpy` 注册 |
+| 尾部饱和 | FE canonical `winsorize`，`pandas_numpy` 注册 |
+| 负方向变换 | FE `neg`，先选 `polars`；该注册缺失时才选 `pandas_numpy` |
+| 其他 FP 所属变换 | 对应 FP adapter；不能根据 FO family 名称推断已走 FE 原生长表 |
+
+`factor_optimizer.adapters.fe_cross_sectional_long.execute_fe_cross_sectional_long`
+是独立的研究适配器，硬选 `PolarsLongBackend`，仅处理 `rank` / `winsorize`。
+它没有接入上述批量入口或默认选择器，也不是已发布安装包保证可用的 API。
+其中 rank 依赖 `factor_engine.backend.panel_coordinate_scaffold_20261003`；本次检查
+该 FE helper 存在于 server-c 工作树，但不在已提交快照中。普通 clone/install 不能
+据此取得它，FO extras 中的 `factor-engine>=0.3.0` 也不保证具有该模块和兼容语义。
+因此安装依赖尚未闭合；要先确认 FE 发布版本确实包含必要 API/helper，再绑定匹配
+版本和执行身份，不能仅凭 editable 工作树运行成功认定组员的安装环境相同。
+
+已有一次 60 日期 × 1000 资产的完整调用 A-B-B-A 比较，输出轴、有限性和数值一致：
+native rank 中位时间约为旧路由的 5.50 倍，native winsorize 约为 6.22 倍，均更慢。
+scatter 子步骤约 13.29 倍的加速不代表完整调用加速；该实验也不是全市场多年大批量
+资格。暂不据此切换默认后端。后续新增选择器必须真实接入经过数值、内存、安装与
+完整调用性能验证的实现，保留明确的显式选项和无资格时的拒绝/回退说明；这项能力
+目前仍未完成。
+
 ## 移动块 bootstrap 的模块化加速（2026-10-04）
 
 验证下界现在通过 `factor_optimizer.research_bootstrap.moving_block_lower_bound` 计算；原 `_lower_bound` 保留薄包装，baseline 与候选调用位置不变。设有效块长 L=max(config.block_length, int(horizon))、时间序列长度 n、每轮块数 K=ceil(n/L)。不足三块时返回 None；每轮仍按原 seed 与同一 `rng.integers(0,n-L+1,size=K)` 抽取起点。
@@ -128,7 +160,7 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
 
 训练/验证日期不需要用户手工选择。新增库入口 `factor_optimizer.research_batch.optimize_factor_batch`：接收轴和标签时点明确的 QE FactorBatch / LabelBundle，自动分段、在训练集选参数、验证、保留 RAW 或输出冻结后的变体。旧的 jobs 筛选脚本没有冒充这个新入口。
 
-值修复统一由 `compile_value_repair` 编译成冻结计划，数值处理交给 FP，Rank IC 交给 QE。本轮从仅平滑/衰减的执行桥扩展至 12 个数值修复族，加 RAW 控制，共 13 个 family 的值级研究路径。仍不更改 production capability，不部署或入库。
+值修复统一由 `compile_value_repair` 编译成冻结计划，数值处理交给所属 FP/FE adapter，Rank IC 交给 QE。以下 12 个数值修复族加 RAW 控制、共 13 个 family 的数字是该节历史回放口径，不代表当前去重后的候选数量。仍不更改 production capability，不部署或入库。
 
 ## 最小调用
 
