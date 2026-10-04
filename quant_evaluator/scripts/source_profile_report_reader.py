@@ -245,6 +245,8 @@ def _check_oracle_report(raw, context, expected_backend, expected_index, name):
             raise ValueError(f"{name} coverage does not match context for {metric}")
         error = _float(output["max_abs_error"], metric)
         tolerance = _float(output["tolerance"], metric)
+        if error < 0.0:
+            raise ValueError(f"{name} absolute error must be nonnegative for {metric}")
         if tolerance != tolerances[metric] or error > tolerance:
             raise ValueError(f"{name} tolerance failed for {metric}")
 
