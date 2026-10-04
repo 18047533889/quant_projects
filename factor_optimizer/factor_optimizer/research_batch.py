@@ -41,8 +41,14 @@ class BatchOptimizationConfig:
     selection_objective: str = 'joint'
     research_cost_rate: float = .001
     research_empty_leg_policy: str = 'signal_cash'
+    max_additional_peak_bytes: int = 64 * 1024**3
+    memory_reserve_bytes: int = 2 * 1024**3
 
     def __post_init__(self):
+        for name, minimum in (("max_additional_peak_bytes", 1), ("memory_reserve_bytes", 0)):
+            value = getattr(self, name)
+            if type(value) is not int or value < minimum:
+                raise ValueError(f"{name} must be an integer >= {minimum}")
         if self.research_empty_leg_policy not in ('signal_cash', 'unavailable'):
             raise ValueError('research_empty_leg_policy must be signal_cash or unavailable')
         if self.selection_objective not in {'joint', 'rank_ic'}:
@@ -501,6 +507,15 @@ def optimize_factor_batch(batch, labels, *, config=None, allow_research=False,
             or not np.array_equal(batch.asset_axis.values, labels.asset_axis.values)
             or labels.values.shape != batch.values.shape[:2]):
         raise ValueError("factor and label axes must match exactly")
+    # Input contracts are already resident. Admit only the additional peak
+    # before split preparation, diagnostics, and the full output allocation.
+    from factor_optimizer.research_memory_admission import require_memory_admission
+    require_memory_admission(
+        batch.values.shape,
+        max_additional_peak_bytes=config.max_additional_peak_bytes,
+        reserve_bytes=config.memory_reserve_bytes,
+        bootstrap_draws=config.bootstrap_draws,
+    )
     split = automatic_time_split(labels, config)
     specs = _specs(config)
     from factor_optimizer.research_diagnostics import diagnose_training_batch

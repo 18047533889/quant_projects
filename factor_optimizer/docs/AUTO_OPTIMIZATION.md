@@ -1,5 +1,24 @@
 # 优化库自动研究入口与方法公式（2026-09-22 更新）
 
+## 批量优化的内存准入（2026-10-04）
+
+`optimize_factor_batch` 在输入轴一致性校验后、时间切分/诊断/完整输出分配前检查额外工作集预算。设 T 为时间数、N 为资产数、F 为因子数、B 为 `bootstrap_draws`：
+
+$$M_{additional}=18TNF+128TN+256\times1024^2+64B\quad\text{bytes}.$$
+
+18TNF 计入输出 float64 与不可变冻结副本、有效性缓冲；128TN 为逐因子串行工作区，不再乘 F；256 MiB 为诊断与缓存预留；64B 为 bootstrap 留存结果及转换的保守 allowance。已有输入和标签已驻留，体现在实时可用内存里，不重复加算。
+
+`BatchOptimizationConfig(max_additional_peak_bytes=64*1024**3, memory_reserve_bytes=2*1024**3)` 是默认配置。前者必须为严格正整数，后者允许零，均拒绝 bool。估算必须同时满足配置上限及 `available_memory >= M_additional + memory_reserve_bytes`；超限抛出 `MemoryError`，不静默截断因子或候选。bootstrap 次数也纳入该预算，不能用极大 B 绕过准入。
+
+实时可用量取 Linux `MemAvailable` 和当前进程 cgroup-v2 各可见祖先 `memory.max` / `memory.high` 减 `memory.current` 的最小值。完整且无限制的层级使用主机余量；隐藏父级、缺失必要字段、负值、不可解析或仅 cgroup-v1 时无法确认余量，抛出 `RuntimeError`，不按无限内存继续。
+
+这是工作集估计而非 RSS 上界或 OOM 保证。其他进程会并发耗用 RAM；任意长 object 资产 ID 的 JSON 序列化等数据依赖临时量也可能超出 shape allowance。调用者仍应控制并发和数据规模，不因准入通过就取消资源监控。
+
+本轮独立模块与真实 FactorBatch/LabelBundle 集成测试合跑：28 passed（0.74 秒）。覆盖超大 bootstrap、预算不足、未知/零余量在训练切分前拒绝，配置 cap 失败不读取 OS，精确 headroom 与零 reserve 可以继续，以及嵌套 cgroup、隐藏祖先和根目录权限错误拒绝。另有配置/切分边界/留出集/输出所有权回归 21 passed；主批量回归 26 passed、1 failed，失败为 FE 前置 pin 不匹配引起缺失候选不可执行，不能宣称全套通过。
+
+FE 负责窗口随后恢复正常加载后，对同一缺失候选失败项进行 fresh 正常冷启动复测：1 passed、26 deselected、3 warnings（32.46 秒），未替换 reader 或绕过 registry。该复测闭合这一项先前故障，不是整套重新通过；仍有既有物理说明 warnings 需继续治理。
+
+
 2026-10-02 的相邻方向计算复用见 [TRAIN 正负方向 RankIC 复用](ANTITHETIC_TRAIN_IC.md)，其中列明内容键、零 IC 回退和验证边界。
 
 后续已接通指定 COS 因子池的 DataAccess 有界读取、TRAIN-only 多维诊断，
@@ -185,6 +204,17 @@ $$ER_t=\frac{|x_t-x_{t-w}|}{\sum_{j=0}^{w-1}|x_{t-j}-x_{t-j-1}|},\quad SC_t=[ER_
 MAD=median(|x−median(x)|)，IQR=Q₀.₇₅−Q₀.₂₅。本轮修正大量并列值导致 MAD/IQR 为 0 的非恒定截面：回退 sample std，只有真正恒定截面才返回 0。先按最大绝对值缩放后计算，避免有限大数溢出后被错误变为全 0；inf 视为缺失。
 
 默认填充候选窗口为 1、3、5；也保留 flag 候选，不能把诊断通道与填充值混为一谈。单纯正向仿射缩放和排名通常不会提高 Rank IC，新入口在没有稳健增益时保留 RAW。
+
+### 缺失标记与自动选择的共同样本边界
+
+直接调用 `missing_indicator` 时按 `isna` 定义：NaN/null 为 1，有限值和正负无穷为 0。批量 optimizer 在执行候选前会把 RAW 中所有非有限值（包括正负无穷）转换为 NaN，因此候选实际看到这些位置时会标为 1；不能把直接算子输入与批量入口清洗后的输入混为一谈。
+当前值级研究入口的配对 Rank IC 使用同一有效样本集合：
+
+$$C_{t,i}=\operatorname{finite}(RAW_{t,i})\land\operatorname{finite}(y_{t,i})\land\operatorname{valid}(y_{t,i})\land\operatorname{finite}(candidate_{t,i}).$$
+
+没有标签 validity 时省略该项。RAW 的显式无效位置在执行前已转换为 NaN。
+因此 standalone flag 在共同样本上恒为 0；即使输入存在缺失值，标记为 1 的位置也不会进入这条配对评分。它不能用当前 paired Rank IC 证明缺失状态的预测力，保留 RAW 不等于缺失算子计算失败。
+flag 是替代值的诊断 Series，不是“原始因子加一个 mask”的多通道输出。若要将缺失状态作为独立信号参与自动选择，需要单独定义参照样本和评分目标；不得直接放宽共同样本掩码以制造增益。2026-10-04 曾完成正常冷启动 FO→FP→FE flag 小样本实测（NaN/±Inf/有限值，重复调用者 index，Polars 执行身份）；这是当时源码的窄算子证据，不证明整个自动选择主链或后续源码仍可执行。随后批量回归遇到 FE `ts_quantile_transport_slope` 前置 pin 不匹配，fill/flag 均记录 ineligible，仍需由 FE 修复后复测，不绕过该加载校验。
 
 ## 仍需要额外执行输入的方法
 
