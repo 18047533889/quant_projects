@@ -24,11 +24,39 @@ bundle = evaluate_factor_source_batch(source, labels, metrics=metrics,
 报告不是签名证明；配置是调用者的可信边界。它不会自行扫描目录、读取环境变量、
 执行 pilot、benchmark 或冷启动 CUDA。未配置时保持原有保守 auto。
 
-注意：当前未取得或拒绝实时资格后，还可能回退到 `source_auto_evidence.py`
-的历史静态形状路由。该路由主要绑定形状、指标、dtype 与 tile，不具备本节
-实时资格的完整源码/设备/请求内容绑定，仍可能选择 CUDA。因此它不是
-“当前源码下已证明最快”的资格，`source_qualification_applied=false` 不能
-被解释为当前性能验证通过；后续仍需补当前大批量证据或收紧历史路由政策。
+`evaluate_factor_source_batch` 的默认 `source_auto_policy="qualified_only"`
+只允许通过当前上下文验证的 CPU/CUDA 赢家决定 auto 路由。没有当前资格时
+使用 CPU，不再让历史静态形状记录独自授权默认 GPU。这个安全回退不是
+“CPU 已测得最快”的声明：应用仍须提供匹配当前源码的批量性能报告。
+
+确需复现历史静态路由时，必须显式传 `source_auto_policy="legacy_measured"`：
+
+```python
+bundle = evaluate_factor_source_batch(
+    source, labels, metrics=metrics, backend="auto",
+    source_auto_policy="legacy_measured",  # 显式历史研究选项，非当前性能资格
+)
+```
+
+历史选项仅在没有显式资格、缓存真正缺失且 provider 未配置或没有精确请求
+候选时开放；拒绝的候选、坏缓存、provider 读取/解析错误、守卫错误和显式
+坏资格即使开启此选项也不能再授权历史 GPU。严格缓存查找区分真正的缺失
+与已淘汰的坏记录，保留拒绝原因，防止后续缺失覆盖它。已有 getter 调用者
+的非严格默认行为保持兼容。有效当前资格仍优先于历史选项。
+
+两个选项只接受精确内置字符串；错误值在 source 元数据/因子读取前拒绝。
+`backend="cpu"` 与显式 `backend="cuda_strict"` 不依赖历史授权。
+回执与 metadata 记录 `source_auto_policy`；历史兼容的资格状态名称中
+`*_legacy_fallback` 字面后缀不代表静态路由获准，应同时检查实际 backend、
+auto 原因与资格 applied 字段。历史路由仍主要绑定形状、指标、dtype 和 tile，
+不具有实时资格的完整源码/设备/请求绑定。
+
+研究基准 CLI `python -m quant_evaluator.scripts.benchmark_real_cos_source_batch`
+提供同名语义的 `--source-auto-policy qualified_only|legacy_measured`，默认也是
+qualified_only。既有 `--verify-auto` 等历史研究开关不会暗中开启历史路由；
+要复现旧门槛必须明确选择 legacy_measured。函数 `run_backend` 转发选项并
+核对实际输出 metadata 的 policy，再记录到回执。新六指标 provider 验证
+工具不提供历史模式，必须验证当前资格而非旧路由。
 
 ## 判定规则与状态
 

@@ -29,6 +29,7 @@ from quant_evaluator.contracts.factor_tile_source import FactorTile
 from quant_evaluator.contracts.factor_batch import AxisRef
 from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.runtime.evaluator import _auto_batch_cuda_rejection
+from quant_evaluator.runtime.source_auto_authority import validate_source_auto_policy
 from quant_evaluator.adapters.cos_factor_tile_source import (
     BoundManifestHelpers, CosFactorTileSource, DataAccessReadContext,
     SourceStageTelemetry,
@@ -365,7 +366,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 source_adapter="legacy", cos_prefetch="auto",
                 max_source_memory_mib=4096, cos_prefetch_workers=2,
                 max_prefetch_memory_mib=512, use_default_tile_size=False,
-                context_observer=None, source_qualification=None):
+                context_observer=None, source_qualification=None,
+                source_auto_policy="qualified_only"):
     """Measure only the API call; optionally observe live context outside it.
 
     The observer is caller-trusted instrumentation, not an oracle or attestation.
@@ -376,6 +378,7 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         raise TypeError("context_observer must be callable or None")
     if not isinstance(use_default_tile_size, bool):
         raise TypeError("use_default_tile_size must be bool")
+    source_auto_policy = validate_source_auto_policy(source_auto_policy)
     if source_adapter == "legacy":
         if cos_prefetch != "auto":
             raise ValueError("cos_prefetch applies only to source_adapter='cos'")
@@ -411,7 +414,8 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         result = evaluate_factor_source_batch(
             source, labels, metrics=selected_metrics, backend=backend,
             max_tile_size=None if use_default_tile_size else tile_size,
-            gpu_policy=policy, **qualification_kwargs,
+            gpu_policy=policy, source_auto_policy=source_auto_policy,
+            **qualification_kwargs,
         )
         elapsed = time.perf_counter() - started
         if context_observer is not None:
@@ -429,6 +433,10 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
                 "cuda" if backend == "cuda_strict" or (backend == "auto" and expected_auto_cuda)
                 else "cpu"):
             raise ValueError("source API used a different backend than requested")
+        reported_auto_policy = validate_source_auto_policy(
+            result.metadata.get("source_auto_policy"))
+        if reported_auto_policy != source_auto_policy:
+            raise ValueError("source API reported a different auto policy")
     finally:
         source.close()
     identity_payload = json.dumps(
@@ -442,6 +450,7 @@ def run_backend(backend, records, source_rows, dates, assets, labels,
         **execution_schedule,
         "backend_requested": backend,
         "backend_used": result.metadata["backend_used"],
+        "source_auto_policy": reported_auto_policy,
         "source_request_fingerprint": result.metadata.get("source_request_fingerprint"),
         "effective_max_tile_size": effective_tile_size,
         "api_default_tile_size": use_default_tile_size,
@@ -620,6 +629,7 @@ def run_gpu_tile_width_ab(args, selected_metrics):
                        str(getattr(args, "cos_prefetch_workers", 2)),
                        "--max-prefetch-memory-mib",
                        str(getattr(args, "max_prefetch_memory_mib", 512)),
+                       "--source-auto-policy", getattr(args, "source_auto_policy", "qualified_only"),
                        "--gpu-worker", "--output", str(output)]
             if getattr(args, "prefetch_objects", False):
                 command.append("--prefetch-objects")
@@ -783,6 +793,10 @@ def main():
                         help="COS adapter object prefetch policy (default: bounded auto)")
     parser.add_argument("--verify-auto", action="store_true",
                         help="also verify an exact certified F8, F48, or F61 ordinary auto route")
+    parser.add_argument("--source-auto-policy",
+                        choices=("qualified_only", "legacy_measured"),
+                        default="qualified_only",
+                        help="policy for historical static source-auto evidence (default: qualified_only)")
     parser.add_argument("--auto-references", nargs=2, type=Path,
                         metavar=("CUDA_CPU_REPORT", "CPU_CUDA_REPORT"),
                         help="run only auto against two opposite-order, matching F61 all-source A/B reports")
@@ -960,7 +974,8 @@ def main():
                 source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
                 max_source_memory_mib=args.max_source_memory_mib,
                 cos_prefetch_workers=args.cos_prefetch_workers,
-                max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+                max_prefetch_memory_mib=args.max_prefetch_memory_mib,
+                source_auto_policy=args.source_auto_policy)
         if benchmark_candidate is not None:
             auto.metadata["benchmark_auto_candidate"] = benchmark_candidate
             receipt["benchmark_auto_candidate"] = benchmark_candidate
@@ -981,7 +996,8 @@ def main():
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
             max_source_memory_mib=args.max_source_memory_mib,
             cos_prefetch_workers=args.cos_prefetch_workers,
-            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib,
+            source_auto_policy=args.source_auto_policy)
         cuda_receipt["preflight"] = cuda_gate
         direct_comparison = compare(auto, cuda, selected, expected_days=len(dates))
         expected_reason, expected_tile = (
@@ -1053,7 +1069,8 @@ def main():
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
             max_source_memory_mib=args.max_source_memory_mib,
             cos_prefetch_workers=args.cos_prefetch_workers,
-            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib,
+            source_auto_policy=args.source_auto_policy)
         run["tile_size"] = args.tile_size
         run["preflight"] = gate
         scalar_metrics, observation_counts = {}, {}
@@ -1102,7 +1119,8 @@ def main():
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
             max_source_memory_mib=args.max_source_memory_mib,
             cos_prefetch_workers=args.cos_prefetch_workers,
-            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib,
+            source_auto_policy=args.source_auto_policy)
         receipt["preflight"] = gate
         runs[backend] = (bundle, receipt)
     cpu, cpu_run = runs["cpu"]
@@ -1124,7 +1142,8 @@ def main():
             source_adapter=args.source_adapter, cos_prefetch=args.cos_prefetch,
             max_source_memory_mib=args.max_source_memory_mib,
             cos_prefetch_workers=args.cos_prefetch_workers,
-            max_prefetch_memory_mib=args.max_prefetch_memory_mib)
+            max_prefetch_memory_mib=args.max_prefetch_memory_mib,
+            source_auto_policy=args.source_auto_policy)
         auto_run["preflight"] = gate
         auto_run["auto_backend_reason"] = auto.metadata.get("auto_backend_reason")
         auto_run["effective_max_tile_size"] = auto.metadata.get("effective_max_tile_size")

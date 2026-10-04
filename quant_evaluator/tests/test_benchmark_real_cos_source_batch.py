@@ -124,7 +124,8 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
     _, asset_axis, _, label, records, source_rows = _fixtures()
     sources = []
 
-    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy,
+                      source_auto_policy):
         sources.append(source)
         for start in range(0, len(source.factor_ids), max_tile_size):
             source.reads.append(
@@ -132,6 +133,7 @@ def test_run_backend_forwards_object_cap_and_validates_receipt(monkeypatch):
         return SimpleNamespace(metadata={
             "factor_tiles_processed": len(source.reads),
             "backend_used": "cuda" if backend == "cuda_strict" else "cpu",
+            "source_auto_policy": source_auto_policy,
             "factor_tile_size": max_tile_size,
             "oom_retries": 0,
         })
@@ -165,12 +167,14 @@ def test_run_backend_all_backends_validate_effective_not_requested_tile_width(
 
     api_widths = []
 
-    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy,
+                      source_auto_policy):
         api_widths.append(max_tile_size)
         source.reads.extend([(0, 2), (2, 4), (4, 5)])
         return SimpleNamespace(metadata={
             "factor_tiles_processed": 3,
             "backend_used": "cuda" if backend in ("cuda_strict", "auto") else "cpu",
+            "source_auto_policy": source_auto_policy,
             "effective_max_tile_size": 2, "admitted_source_tile_size": 3,
             "factor_tile_size": 2, "oom_retries": 0,
         })
@@ -203,12 +207,13 @@ def test_run_backend_default_tile_size_passes_none_and_reports_widths(monkeypatc
     api_widths = []
 
     def fake_evaluate(received_source, labels, *, metrics, backend,
-                      max_tile_size, gpu_policy):
+                      max_tile_size, gpu_policy, source_auto_policy):
         assert received_source is source
         api_widths.append(max_tile_size)
         received_source.reads.extend([(0, 2), (2, 4), (4, 5)])
         return SimpleNamespace(metadata={
             "factor_tiles_processed": 3, "backend_used": "cpu",
+            "source_auto_policy": source_auto_policy,
             "effective_max_tile_size": 2, "admitted_source_tile_size": 3,
         })
 
@@ -278,12 +283,14 @@ def test_run_backend_closes_both_source_adapters_on_success_and_failure(
     else:
         monkeypatch.setattr(harness, "RealCosSource", Source)
 
-    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy):
+    def fake_evaluate(source, labels, *, metrics, backend, max_tile_size, gpu_policy,
+                      source_auto_policy):
         if fail_evaluation:
             raise RuntimeError("evaluation failed")
         source.reads.extend([(0, 1), (1, 2)])
         return SimpleNamespace(metadata={"factor_tiles_processed": 2,
-            "backend_used": "cpu", "effective_max_tile_size": 1})
+            "backend_used": "cpu", "effective_max_tile_size": 1,
+            "source_auto_policy": source_auto_policy})
 
     monkeypatch.setattr(harness, "evaluate_factor_source_batch", fake_evaluate)
     call = lambda: harness.run_backend(
@@ -423,6 +430,7 @@ def test_run_backend_forwards_explicit_cos_prefetch_policy(monkeypatch, mode, wo
     monkeypatch.setattr(harness, "evaluate_factor_source_batch",
         lambda *args, **kwargs: SimpleNamespace(metadata={
             "factor_tiles_processed": 1, "backend_used": "cpu",
+            "source_auto_policy": kwargs["source_auto_policy"],
             "effective_max_tile_size": 1}))
     _, receipt = harness.run_backend(
         "cpu", records, source_rows, pd.date_range("2024-01-01", periods=3, freq="B"),
@@ -654,11 +662,18 @@ def test_pearson_chain_benchmark_accepts_only_complete_permutations():
     assert not harness.is_pearson_chain(("pearson_ic",) * 4)
 
 
-def test_all_source_benchmark_profile_covers_public_source_metric_set():
+def test_historical_all_source_benchmark_profile_remains_supported_public_subset():
     from quant_evaluator.api.factor_source import _SOURCE_METRICS
 
-    assert len(harness.ALL_SOURCE_METRICS) == len(_SOURCE_METRICS) == 15
-    assert frozenset(harness.ALL_SOURCE_METRICS) == _SOURCE_METRICS
+    # Expanding the public catalog must not silently expand historical qualification.
+    expected = (
+        "rank_ic", "rank_ic_series", "ic_ir", "ic_std", "ic_median",
+        "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
+        "coverage", "quantile_spread", "quantile_monotonicity",
+        "daily_quantile_monotonicity_rate", "turnover", "factor_turnover_rate",
+    )
+    assert harness.ALL_SOURCE_METRICS == expected
+    assert frozenset(expected) <= _SOURCE_METRICS
 
 
 def test_gpu_tile_width_ab_interleaves_and_checks_every_run(monkeypatch, tmp_path):

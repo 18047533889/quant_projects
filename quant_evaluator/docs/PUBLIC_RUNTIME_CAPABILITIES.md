@@ -19,8 +19,11 @@ fork 用例与全 NaN cutoff 用例。必须继续用正确输入验证相应路
 同轮 source 输出契约、资格/缓存、严格报告、GPU 六形态数值与 CLI 的联合
 回归为 193 passed、1 skipped（单 GPU 无法测试异设备），对应已发布修复
 `b5131a890`。以下较早 A/B 报告保留为历史证据；源码改变后不能继续冒充
-当前实时性能资格。静态形状路由仍可能选择 CUDA，但并不具有实时资格的
-完整源码/设备/请求绑定。当前默认 provider 的接线、适用范围与回退边界见
+当前实时性能资格。source-batch 的默认 `source_auto_policy="qualified_only"`
+不再让历史静态形状路由独自授权 GPU；仅显式 `legacy_measured` 且真正无
+资格/候选时允许历史选择，任何拒绝或校验错误都禁止这种重新授权。
+此改动仅针对 source-batch，不改变普通 `evaluate` 的独立路由契约。
+当前默认 provider 的接线、适用范围与回退边界见
 [默认 source auto](SOURCE_DEFAULT_PROFILE_PROVIDER_20261004.md)。
 
 本页补充 `METRIC_REFERENCE.md` 的调用层说明。指标是否可请求以当前注册表为准；
@@ -724,7 +727,10 @@ rtol=1e-8、atol=1e-10 对拍。原始有界报告见
 `bounded_f61_mixed_three_gpu`，8 个 tile 全部完成，三个指标的输出字节哈希
 与严格 CUDA 完全一致；见[auto 复测](benchmarks/real_cos_f61_whole_source_auto_20260928.json)。
 
-该来源 API 的 `auto` 只在上述精确形状、三指标集合、默认精度、
+上述来源 API `auto` 时序是历史测试，不是当前默认授权。如今默认
+`source_auto_policy="qualified_only"` 要求当前报告资格；以下静态形状门槛
+仅用于显式 `source_auto_policy="legacy_measured"` 且没有资格拒绝的研究请求：
+在上述精确形状、三指标集合、默认精度、
 float64 因子和标签、来源与调用方的 tile 上限至少 8、显卡通过
 14 GiB 有效空闲显存准入时选 CUDA；这一显存门槛是后端准入，
 并不保证实际 tile 宽度。其它请求回退 CPU，并在
@@ -1094,7 +1100,7 @@ auto 选择 CUDA。CUDA 单轮来源读取为 87.94 s，说明这条链当前主
 ## F61 全部 15 项来源指标整批请求（2026-09-30）
 
 在同一真实 COS manifest、2,586 日 × 5,461 股 × 61 因子、float64、
-tile 16 上，将 `evaluate_factor_source_batch` 支持的 15 项指标放入同一请求，
+tile 16 上，将当时历史基准配置的 15 项来源指标放入同一请求，
 包括 rank/Pearson IC 及序列、IC 统计、覆盖率、分位收益与单调性、换手。
 两轮相反顺序的 CPU/CUDA A/B 均对拍 316,285 个结果元素，涵盖指标形状、
 有限值 mask、逐因子观测数及数值容差；同一后端跨两轮的逐指标值哈希也相同。
@@ -1105,7 +1111,10 @@ tile 16 上，将 `evaluate_factor_source_batch` 支持的 15 项指标放入同
 | CPU→CUDA | 599.92 s | 188.22 s | 3.19× | 15/15 通过 |
 
 最大绝对误差约 8.33×10⁻¹⁶；CPU/CUDA 之间不要求浮点字节相同。
-`auto` 仅对该精确形状、15 项完整集合、float64 因子及标签、默认精度、
+以下是 2026-09-30 的历史静态路由范围，不是当前默认性能资格。
+复现它须显式选择 `source_auto_policy="legacy_measured"` 且通过纯缺失授权门槛；
+当前公开来源指标已扩展为 24 项，这些历史报告不为新增指标或新源码授权。
+历史 `auto` 仅对该精确形状、15 项完整集合、float64 因子及标签、默认精度、
 来源和调用方 tile 上限均至少 16、有效显存至少 14 GiB 的请求选择 CUDA，
 实际 tile 固定为 16。其它形状、指标子集和资源不足时仍按保守路由处理。
 本结果不外推到任意股票池、任意批量大小或生产 PIT 数据。

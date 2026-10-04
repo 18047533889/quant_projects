@@ -21,6 +21,9 @@ from quant_evaluator.contracts.factor_tile_source import (
 from quant_evaluator.runtime.source_auto_evidence import (
     SOURCE_AUTO_EVIDENCE_VERSION, SOURCE_AUTO_METRICS, select_source_auto_route,
 )
+from quant_evaluator.runtime.source_auto_authority import (
+    legacy_auto_authorized, validate_source_auto_policy,
+)
 from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
 from quant_evaluator.runtime.source_profile_router import (
     SourceProfileQualificationError, discard_source_route_profile_cache,
@@ -136,19 +139,22 @@ def _cpu_source_batch(source, metadata, label, metrics, policy, max_tile_size):
 def evaluate_factor_source_batch(
     source, label_bundle, *, metrics=("rank_ic", "rank_ic_series"),
     backend="auto", max_tile_size=None, gpu_policy=None, source_qualification=None,
+    source_auto_policy="qualified_only",
 ) -> BatchEvaluationBundle:
     """Evaluate every source factor once in bounded tiles.
 
     Supported options: backend is auto/cpu/cuda_strict; max_tile_size caps
     source reads; gpu_policy.max_factor_tile_size caps GPU factor tiles.
-    source_qualification accepts a counterbalanced CPU/CUDA receipt pair for
-    current-context routing; only auto mode consumes it. A valid supplied pair
-    can be cached for later exact-request auto calls. Cache misses, stale
-    source/runtime identities and malformed receipts retain the legacy auto
-    envelope fallback with an explicit qualification status in the receipt.
+    source_auto_policy defaults to qualified_only; legacy_measured permits
+    static routing only after pure qualification absence. Rejected/error states
+    stay on CPU. source_qualification accepts a counterbalanced CPU/CUDA receipt
+    pair for current-context routing; only auto mode consumes it. A valid
+    supplied pair can be cached for later exact-request auto calls.
     The caller owns source.close(). The result is columnar and omits
     the richer EvaluationBundle diagnostics/probe artifacts.
     """
+    source_auto_policy = validate_source_auto_policy(source_auto_policy)
+
     if isinstance(metrics, (str, bytes)):
         raise InvalidContractError("metrics must be a sequence of metric ids")
     try:
@@ -209,13 +215,19 @@ def evaluate_factor_source_batch(
     profile_records = source_qualification
     if backend == "auto":
         if profile_records is None:
-            profile_records = get_cached_source_route_profile_records(
-                source=source, metadata=metadata, metrics=selected,
-                request_fingerprint=request_fingerprint,
-                requested_tile_size=requested_tile_width, policy=policy)
+            try:
+                profile_records = get_cached_source_route_profile_records(
+                    source=source, metadata=metadata, metrics=selected,
+                    request_fingerprint=request_fingerprint,
+                    requested_tile_size=requested_tile_width, policy=policy, strict=True)
+            except SourceProfileQualificationError as exc:
+                profile_attempted = True
+                qualification_status = "rejected_legacy_fallback"
+                qualification_reason = exc.reason
+                qualification_provider_status = "profile_cache_rejected"
             if profile_records is not None:
                 qualification_origin = "process_cache"
-            else:
+            elif not profile_attempted:
                 try:
                     from quant_evaluator.runtime.source_qualification_provider import (
                         lookup_source_qualification_candidate,
@@ -316,7 +328,12 @@ def evaluate_factor_source_batch(
                     route, reason = "cpu", "qualified_cuda_resource_gate_" + rejection
                     qualification_status = "qualified_cuda_ineligible"
                     qualification_reason = rejection
-    if backend == "auto" and not qualification_decision_used:
+    if backend == "auto" and not qualification_decision_used and legacy_auto_authorized(
+            policy=source_auto_policy,
+            qualification_status=qualification_status,
+            qualification_reason=qualification_reason,
+            provider_status=qualification_provider_status,
+            qualification_supplied=source_qualification is not None):
         shape = (metadata.time_axis.size, metadata.asset_axis.size, len(metadata.factor_ids))
         evidence = select_source_auto_route(
             shape=shape, metrics=selected, source_dtype=metadata.dtype,
@@ -343,6 +360,16 @@ def evaluate_factor_source_batch(
             tile_width = evidence.effective_tile_width
         elif reason == "explicit":
             route, reason = "cpu", "source_shape_or_metrics_not_certified"
+    elif backend == "auto" and not qualification_decision_used:
+        pure_absence = (
+            source_qualification is None
+            and qualification_status == "not_available_legacy_fallback"
+            and qualification_reason in {"qualified_cache_miss", "qualified_profile_cache_miss"}
+            and qualification_provider_status in {"provider_not_configured", "candidate_not_found"}
+        )
+        route, reason = "cpu", (
+            "source_qualification_required" if pure_absence
+            else "source_qualification_rejected")
     if route == "cuda_strict" and backend == "auto":
         if memory_tile_limit < tile_width:
             # A measured GPU width cannot silently become an unmeasured one.
@@ -431,6 +458,7 @@ def evaluate_factor_source_batch(
         "source_request_fingerprint": request_fingerprint,
         "backend_requested": backend,
         "backend_used": backend_used,
+        "source_auto_policy": source_auto_policy,
         "auto_backend_reason": reason if backend == "auto" else None,
         "source_qualification_status": qualification_status,
         "source_qualification_reason": qualification_reason,
@@ -471,6 +499,7 @@ def evaluate_factor_source_batch(
         "source_request_fingerprint": request_fingerprint,
         "backend_requested": backend,
         "backend_used": backend_used,
+        "source_auto_policy": receipt["source_auto_policy"],
         "auto_backend_reason": receipt["auto_backend_reason"],
         "source_qualification_status": receipt["source_qualification_status"],
         "source_qualification_reason": receipt["source_qualification_reason"],

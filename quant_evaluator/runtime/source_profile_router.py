@@ -200,20 +200,26 @@ def is_source_route_profile_pair(records: object) -> bool:
 
 def get_cached_source_route_profile_records(
     *, source, metadata, metrics, request_fingerprint: str,
-    requested_tile_size: int, policy: GPUExecutionPolicy,
+    requested_tile_size: int, policy: GPUExecutionPolicy, strict: bool = False,
 ) -> tuple[CounterbalancedRouteProfileRecord, CounterbalancedRouteProfileRecord] | None:
     """Cheaply look up the v2 namespace before any full live identity capture."""
+    if type(strict) is not bool:
+        raise SourceProfileQualificationError("profile_cache_strict_mode_invalid")
     try:
         key = _profile_cache_key(
             source=source, metadata=metadata, metrics=metrics,
             request_fingerprint=request_fingerprint,
             requested_tile_size=requested_tile_size, policy=policy)
-    except (TypeError, ValueError, SourceProfileQualificationError):
+    except (TypeError, ValueError, SourceProfileQualificationError) as exc:
+        if strict:
+            raise SourceProfileQualificationError("profile_cache_key_invalid") from exc
         return None
     records = profile_cache.get_validated_records(key)
     if not is_source_route_profile_pair(records):
         if records is not None:
             profile_cache.discard_validated_records(key)
+            if strict:
+                raise SourceProfileQualificationError("qualified_profile_cache_malformed")
         return None
     return records
 
