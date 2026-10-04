@@ -863,7 +863,10 @@ def incremental_assign(
     :param fingerprints: new-factor fingerprints (their ``factor_id`` must not
         already be a member of ``cluster_versions``; violation FAILS CLOSED).
     :param cluster_versions: logical_cluster_id -> ClusterVersionArtifact of the
-        CURRENT production cluster version (never mutated here).
+        CURRENT production cluster version (never mutated here). Member factor
+        IDs must be disjoint across this mapping, for exact and ANN recall alike;
+        overlapping micro/macro levels must not be mixed in one request. Audit
+        traversal uses sorted logical-cluster keys, preserving member tie order.
     :param fingerprints_by_id: factor_id -> :class:`SimilarityFingerprintArtifact`
         covering BOTH the existing members and the new factors (members' stored
         embeddings are the nearest-neighbour library).
@@ -884,12 +887,21 @@ def incremental_assign(
     if not cluster_versions:
         raise ValueError("cluster_versions must be non-empty")
 
+    # Canonicalize only the logical-cluster mapping, not member tie order.
+    # This local view keeps exact, ANN, and formal audit traversal stable
+    # without changing the caller's mapping or immutable cluster artifacts.
+    cluster_versions = dict(sorted(cluster_versions.items()))
     new_ids = [fp.factor_id for fp in fingerprints]
     if len(set(new_ids)) != len(new_ids):
         raise ValueError("new fingerprint factor_ids must be unique")
     member_all: set[str] = set()
     for cv in cluster_versions.values():
-        member_all.update(cv.member_factor_ids)
+        for member_id in cv.member_factor_ids:
+            if member_id in member_all:
+                raise ValueError(
+                    "a member factor cannot belong to multiple logical clusters"
+                )
+            member_all.add(member_id)
     for fp in fingerprints:
         if fp.factor_id in member_all:
             raise ValueError(
