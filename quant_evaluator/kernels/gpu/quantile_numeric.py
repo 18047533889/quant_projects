@@ -154,6 +154,12 @@ def repair_quantile_means_gpu(
     are rejected because the fixed-point accumulator's proven bound uses that
     admission limit. Only small risk-count metadata is synchronized to host.
 
+    ``workspace_bytes`` admits algorithm scratch and measured local memory
+    for launched logical threads, not total physical CUDA memory consumption.
+    Driver allocation granularity, warp reservations, and allocator overhead
+    require the caller's separate live-VRAM admission gate; a small workspace
+    budget is not a bound on physical device-memory reservations.
+
     This kernel is experimental until qualified on supported CUDA devices.
     """
     cp = _cupy()
@@ -219,13 +225,19 @@ def repair_quantile_means_gpu(
         return means
     kernel = cp.RawKernel(_FIXED_MEAN, "fixed_mean", options=("--std=c++11",))
     fixed_local = _local_size_bytes(kernel)
-    fixed_required = normal_required + _THREADS * max(8192, fixed_local)
-    if fixed_required > workspace_bytes:
+    # Each thread repairs one independent bucket; there is no warp-wide
+    # cooperation. Bound both launch width and ID tiles by the admitted local
+    # memory instead of demanding a full 32-thread block for a tiny workload.
+    per_thread_required = max(8192, fixed_local)
+    available_threads = (workspace_bytes - normal_required) // per_thread_required
+    if available_threads < 1:
+        fixed_required = normal_required + per_thread_required
         raise MemoryError(f"quantile exact repair requires {fixed_required} workspace bytes")
-    for start in range(0, risk_count, _THREADS):
-        stop = min(start + _THREADS, risk_count)
+    threads = min(_THREADS, risk_count, available_threads)
+    for start in range(0, risk_count, threads):
+        stop = min(start + threads, risk_count)
         batch_ids = ids[start:stop]
-        kernel((1,), (_THREADS,),
+        kernel((1,), (threads,),
                (bucket, labels, means, counts, batch_ids, error_flag, rows,
                 ncols, q, int(min_assets), stop - start))
     if int(error_flag.item()):
