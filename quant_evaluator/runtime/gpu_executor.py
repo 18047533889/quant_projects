@@ -39,6 +39,7 @@ class GPUExecutor:
     SUPPORTED_METRICS = frozenset({
         "sharpe_ratio", "sortino_ratio", "win_rate", "max_drawdown", "calmar_ratio",
         "coverage", "rank_ic", "rank_ic_positive_ratio", "ic_ir", "ic_std", "ic_median", "rank_ic_series",
+        "recent_3m_rank_ic", "rolling_rank_ic_ir",
         "pearson_ic", "pearson_ic_series", "pearson_ic_std", "pearson_ic_ir",
         "quantile_returns_full", "quantile_returns_daily", "quantile_spread",
         "quantile_monotonicity", "daily_quantile_monotonicity_series",
@@ -647,7 +648,8 @@ class GPUExecutor:
                 cov = cp.mean(finite, axis=2)  # (T,F)
                 scalar["coverage"] = _to_cpu(cp.mean(cov, axis=0))  # (F,)
                 counts[m] = _to_cpu(cp.sum(finite, axis=(0, 2)))
-            elif m in ("rank_ic", "rank_ic_positive_ratio", "ic_ir", "ic_std", "ic_median", "rank_ic_series"):
+            elif m in ("rank_ic", "rank_ic_positive_ratio", "ic_ir", "ic_std", "ic_median",
+                       "rank_ic_series", "recent_3m_rank_ic", "rolling_rank_ic_ir"):
                 if min_assets not in rank_cache:
                     from quant_evaluator.kernels.gpu.correlation import batched_spearman_ic
                     rank_cache[min_assets], _ = batched_spearman_ic(factors, labels, min_obs=min_assets)
@@ -665,6 +667,17 @@ class GPUExecutor:
                     positive = cp.sum(cp.isfinite(rank_ic) & (rank_ic > 0), axis=0)
                     ratio = positive / cp.maximum(count, 1)
                     scalar[m] = _to_cpu(cp.where(count >= min_periods, ratio, cp.nan))
+                elif m in {"recent_3m_rank_ic", "rolling_rank_ic_ir"}:
+                    from quant_evaluator.kernels.gpu.predictive import (
+                        recent_3m_rank_ic, rolling_rank_ic_ir,
+                    )
+                    if m == "recent_3m_rank_ic":
+                        scalar[m] = recent_3m_rank_ic(
+                            rank_ic, min_periods=min_periods)
+                    else:
+                        scalar[m] = rolling_rank_ic_ir(
+                            rank_ic, window=parameters.get("window", 60),
+                            min_periods=min_periods)
                 elif m == "ic_ir":
                     finite_ic = cp.where(cp.isfinite(rank_ic), rank_ic, cp.nan)
                     mu = cp.nanmean(finite_ic, axis=0)

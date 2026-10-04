@@ -9,13 +9,18 @@ from quant_evaluator.runtime.source_auto_evidence import SOURCE_AUTO_METRICS
 from quant_evaluator.runtime.source_metric_catalog import (
     SOURCE_IMPLEMENTED_METRICS,
     SOURCE_SERIES_METRICS,
+    SOURCE_SUMMARY_METRICS,
 )
+
 
 
 def test_source_metric_catalog_is_immutable_and_includes_only_supported_union():
     assert isinstance(SOURCE_IMPLEMENTED_METRICS, frozenset)
     assert isinstance(SOURCE_SERIES_METRICS, frozenset)
-    assert SOURCE_IMPLEMENTED_METRICS == SOURCE_AUTO_METRICS | GPU_LINEAR_QUANTILE_METRICS
+    assert SOURCE_IMPLEMENTED_METRICS == (
+        SOURCE_AUTO_METRICS | GPU_LINEAR_QUANTILE_METRICS | SOURCE_SUMMARY_METRICS
+    )
+    assert not SOURCE_SUMMARY_METRICS.intersection(SOURCE_AUTO_METRICS)
     assert SOURCE_SERIES_METRICS == frozenset({"rank_ic_series", "pearson_ic_series"})
 
 

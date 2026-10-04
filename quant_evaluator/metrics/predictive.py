@@ -15,6 +15,7 @@ deterministic and testable without a calendar.
 
 from __future__ import annotations
 
+import numbers
 from typing import Optional, Sequence
 
 import numpy as np
@@ -107,25 +108,59 @@ def _recent_mean(s: np.ndarray, n_days: int) -> np.ndarray:
 
 
 def _rolling_mean_ir(s: np.ndarray, window: int, min_periods: int):
-    """Rolling mean and IR (mean/std) over a trailing window, (T, F) each."""
+    """Rolling mean and IR over stable, centered windows in bounded chunks."""
     T, F = s.shape
-    finite = np.isfinite(s)
-    x = np.where(finite, s, 0.0)
-    pref = np.concatenate([np.zeros((1, F)), np.cumsum(x, axis=0)], axis=0)
-    fpref = np.concatenate([np.zeros((1, F)), np.cumsum(finite, axis=0)], axis=0)
-    pref_sq = np.concatenate([np.zeros((1, F)), np.cumsum(x * x, axis=0)], axis=0)
-    ends = np.arange(1, T + 1)
-    start = np.maximum(ends - window, 0)
-    cnt = fpref[ends] - fpref[start]
-    ssum = pref[ends] - pref[start]
-    ssq = pref_sq[ends] - pref_sq[start]
-    with np.errstate(invalid="ignore", divide="ignore"):
-        mean = ssum / np.maximum(cnt, 1.0)
-        var = ssq - cnt * mean * mean
-        std = np.sqrt(np.maximum(var, 0.0) / np.maximum(cnt - 1, 1.0))
-        ir = mean / std
-    mean = np.where(cnt >= min_periods, mean, np.nan)
-    ir = np.where((cnt >= max(2, min_periods)) & (std > 1e-12), ir, np.nan)
+    if (isinstance(window, (bool, np.bool_))
+            or not isinstance(window, numbers.Integral)
+            or window < 1):
+        raise ValueError("window must be a positive integer")
+    if (isinstance(min_periods, (bool, np.bool_))
+            or not isinstance(min_periods, numbers.Integral)
+            or min_periods < 1):
+        raise ValueError("min_periods must be a positive integer")
+    window = int(window)
+    min_periods = int(min_periods)
+    mean = np.full((T, F), np.nan, dtype=np.float64)
+    ir = np.full((T, F), np.nan, dtype=np.float64)
+    workspace_elements = 65_536
+    factor_chunk = max(1, min(F, workspace_elements // window))
+
+    def assign_windows(start, factor_start, factor_stop, blocks):
+        finite = np.isfinite(blocks)
+        count = np.sum(finite, axis=1)
+        safe = np.where(finite, blocks, 0.0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            window_mean = np.sum(safe, axis=1) / np.maximum(count, 1)
+            centered = np.where(finite, blocks - window_mean[:, None, :], 0.0)
+            squared_deviation = np.sum(centered * centered, axis=1)
+            std = np.sqrt(squared_deviation / np.maximum(count - 1, 1))
+            window_ir = window_mean / std
+        output_slice = slice(start, start + len(blocks))
+        factor_slice = slice(factor_start, factor_stop)
+        mean[output_slice, factor_slice] = np.where(
+            count >= min_periods, window_mean, np.nan)
+        ir[output_slice, factor_slice] = np.where(
+            (count >= max(2, min_periods)) & (std > 1e-12),
+            window_ir, np.nan)
+
+    for factor_start in range(0, F, factor_chunk):
+        factor_stop = min(F, factor_start + factor_chunk)
+        factor_width = factor_stop - factor_start
+        early_stop = min(T, window - 1)
+        for end in range(1, early_stop + 1):
+            blocks = s[None, max(0, end - window):end, factor_start:factor_stop]
+            assign_windows(end - 1, factor_start, factor_stop, blocks)
+
+        if T >= window:
+            rows_per_chunk = max(
+                1, workspace_elements // (window * factor_width))
+            windows = np.lib.stride_tricks.sliding_window_view(
+                s[:, factor_start:factor_stop], window, axis=0)
+            for row_start in range(0, len(windows), rows_per_chunk):
+                row_stop = min(len(windows), row_start + rows_per_chunk)
+                blocks = windows[row_start:row_stop].transpose(0, 2, 1)
+                output_start = row_start + window - 1
+                assign_windows(output_start, factor_start, factor_stop, blocks)
     return mean, ir
 
 
@@ -136,18 +171,25 @@ def _autocorr_lag(s: np.ndarray, lag: int) -> np.ndarray:
         return np.full(F, np.nan)
     finite = np.isfinite(s)
     pair = finite[lag:, :] & finite[:-lag, :]
-    n = np.sum(pair, axis=0).astype(np.float64)
+    n = np.sum(pair, axis=0)
     x_prev = np.where(pair, s[:-lag, :], 0.0)
     x_curr = np.where(pair, s[lag:, :], 0.0)
-    s_prev = np.sum(x_prev, axis=0)
-    s_curr = np.sum(x_curr, axis=0)
-    s_pp = np.sum(x_prev * x_prev, axis=0)
-    s_cc = np.sum(x_curr * x_curr, axis=0)
-    s_pc = np.sum(x_prev * x_curr, axis=0)
-    num = n * s_pc - s_prev * s_curr
-    denom = np.sqrt((n * s_pp - s_prev * s_prev) * (n * s_cc - s_curr * s_curr))
+    anchor_index = np.argmax(pair, axis=0)
+    anchor_prev = x_prev[anchor_index, np.arange(F)]
+    anchor_curr = x_curr[anchor_index, np.arange(F)]
+    delta_prev = np.where(pair, x_prev - anchor_prev[None, :], 0.0)
+    delta_curr = np.where(pair, x_curr - anchor_curr[None, :], 0.0)
+    safe_n = np.maximum(n, 1)
+    mean_prev = np.sum(delta_prev, axis=0) / safe_n
+    mean_curr = np.sum(delta_curr, axis=0) / safe_n
+    centered_prev = np.where(pair, delta_prev - mean_prev[None, :], 0.0)
+    centered_curr = np.where(pair, delta_curr - mean_curr[None, :], 0.0)
+    covariance = np.sum(centered_prev * centered_curr, axis=0)
+    variance_prev = np.sum(centered_prev * centered_prev, axis=0)
+    variance_curr = np.sum(centered_curr * centered_curr, axis=0)
+    denom = np.sqrt(variance_prev * variance_curr)
     with np.errstate(invalid="ignore", divide="ignore"):
-        corr = num / denom
+        corr = covariance / denom
     corr = np.where((denom <= 0) | (~np.isfinite(denom)) | (n < 2), np.nan, corr)
     return corr
 

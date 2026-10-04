@@ -65,26 +65,11 @@ def _recent_mean(ic, n_days):
 
 
 def _rolling_mean_ir(ic, window, min_periods):
-    """Rolling mean and IR over a trailing window, (T, F) each."""
+    """Rolling mean and IR using stable centered variance in bounded chunks."""
     cp = _import_cp()
+    from quant_evaluator.kernels.gpu.rolling_ic_statistics import rolling_ic_mean_ir
     T, F = ic.shape
-    finite = cp.isfinite(ic)
-    x = cp.where(finite, ic, 0.0)
-    pref = cp.concatenate([cp.zeros((1, F)), cp.cumsum(x, axis=0)], axis=0)
-    fpref = cp.concatenate([cp.zeros((1, F)), cp.cumsum(finite, axis=0)], axis=0)
-    pref_sq = cp.concatenate([cp.zeros((1, F)), cp.cumsum(x * x, axis=0)], axis=0)
-    ends = cp.arange(1, T + 1)
-    start = cp.maximum(ends - window, 0)
-    cnt = fpref[ends] - fpref[start]
-    ssum = pref[ends] - pref[start]
-    ssq = pref_sq[ends] - pref_sq[start]
-    mean = ssum / cp.maximum(cnt, 1.0)
-    var = ssq - cnt * mean * mean
-    std = cp.sqrt(cp.maximum(var, 0.0) / cp.maximum(cnt - 1, 1.0))
-    ir = mean / std
-    mean = cp.where(cnt >= min_periods, mean, cp.nan)
-    ir = cp.where((cnt >= max(2, min_periods)) & (std > 1e-12), ir, cp.nan)
-    return mean, ir
+    return rolling_ic_mean_ir(ic, window, min_periods)
 
 
 def _autocorr_lag(ic, lag):
@@ -93,19 +78,25 @@ def _autocorr_lag(ic, lag):
     T, F = ic.shape
     if lag >= T:
         return cp.full(F, cp.nan)
+    if lag <= 0:
+        raise ValueError("lag must be a positive integer")
     finite = cp.isfinite(ic)
     pair = finite[lag:, :] & finite[:-lag, :]
     n = cp.sum(pair, axis=0).astype(cp.float64)
-    x_prev = cp.where(pair, ic[:-lag, :], 0.0)
-    x_curr = cp.where(pair, ic[lag:, :], 0.0)
-    s_prev = cp.sum(x_prev, axis=0)
-    s_curr = cp.sum(x_curr, axis=0)
-    s_pp = cp.sum(x_prev * x_prev, axis=0)
-    s_cc = cp.sum(x_curr * x_curr, axis=0)
-    s_pc = cp.sum(x_prev * x_curr, axis=0)
-    num = n * s_pc - s_prev * s_curr
-    denom = cp.sqrt((n * s_pp - s_prev * s_prev) * (n * s_cc - s_curr * s_curr))
-    corr = num / denom
+    first_pair = cp.argmax(pair, axis=0)
+    left_anchor = cp.take_along_axis(ic[:-lag, :], first_pair[None, :], axis=0)[0]
+    right_anchor = cp.take_along_axis(ic[lag:, :], first_pair[None, :], axis=0)[0]
+    left_delta = cp.where(pair, ic[:-lag, :] - left_anchor, 0.0)
+    right_delta = cp.where(pair, ic[lag:, :] - right_anchor, 0.0)
+    left_mean = cp.sum(left_delta, axis=0) / cp.maximum(n, 1.0)
+    right_mean = cp.sum(right_delta, axis=0) / cp.maximum(n, 1.0)
+    left_centered = cp.where(pair, left_delta - left_mean, 0.0)
+    right_centered = cp.where(pair, right_delta - right_mean, 0.0)
+    covariance = cp.sum(left_centered * right_centered, axis=0)
+    left_ss = cp.sum(left_centered * left_centered, axis=0)
+    right_ss = cp.sum(right_centered * right_centered, axis=0)
+    denom = cp.sqrt(left_ss * right_ss)
+    corr = covariance / denom
     corr = cp.where((denom <= 0) | (~cp.isfinite(denom)) | (n < 2), cp.nan, corr)
     return corr
 
