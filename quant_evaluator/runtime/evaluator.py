@@ -1451,7 +1451,9 @@ def _per_factor_observation_counts(
                 np.where(finite, factor_batch.values, np.nan),
                 quantile=parameters.get("quantile", .9))
             return np.isfinite(membership).sum(axis=0)
-        valid = (finite.sum(axis=1) >= 2)
+        # Rank-proxy weights are defined only with >=10 finite signals.
+        # Count actual eligible transitions, matching value and CUDA kernels.
+        valid = (finite.sum(axis=1) >= 10)
         return (valid[1:] & valid[:-1]).sum(axis=0)
     if registry_name == "daily_quantile_monotonicity_rate":
         from quant_evaluator.metrics.registry_adapters import compute_daily_quantile_monotonicity_series_value
