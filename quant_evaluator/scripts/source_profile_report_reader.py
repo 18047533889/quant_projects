@@ -52,6 +52,9 @@ _AUTO_FIELDS = frozenset({
     "values_sha256",
 })
 _DEFAULT_AUTO_FIELDS = _AUTO_FIELDS | {"cache_status"}
+_FULL_AUTO_IDENTITY_FIELDS = frozenset({
+    "backend_requested", "source_auto_policy", "metric_outputs",
+})
 
 
 @dataclass(frozen=True)
@@ -252,9 +255,20 @@ def _check_oracle_report(raw, context, expected_backend, expected_index, name):
 
 
 def _check_auto_receipt(raw, context, winner, run_index, name, *, default_auto=False,
-                        expected_value_hashes=None):
+                        expected_value_hashes=None, expected_outputs=None):
     expected_fields = _DEFAULT_AUTO_FIELDS if default_auto else _AUTO_FIELDS
+    if expected_outputs is not None:
+        expected_fields = expected_fields | _FULL_AUTO_IDENTITY_FIELDS
     auto = _mapping(raw, expected_fields, name)
+    if expected_outputs is not None:
+        if (_str(auto["backend_requested"], f"{name}.backend_requested") != "auto"
+                or _str(auto["source_auto_policy"], f"{name}.source_auto_policy")
+                != "qualified_only"):
+            raise ValueError(f"{name} requires qualified_only auto policy")
+        outputs = _tuple(auto["metric_outputs"], f"{name}.metric_outputs", _output)
+        if outputs != expected_outputs:
+            raise ValueError(f"{name} complete output identity does not match "
+                             "the selected backend profile")
     if (_str(auto["backend_used"], f"{name}.backend_used") != winner
             or _str(auto["qualification_status"], f"{name}.qualification_status")
             != "qualified_current_source"
@@ -329,6 +343,17 @@ def _check_report(payload):
         raise ValueError("profile records do not follow the fixed cap-16 ABBA schedule")
     if records[1].context != context:
         raise ValueError("profile records do not share an identical context")
+    if schema.full_auto_identity_required:
+        expected_coverage = tuple(
+            (metric, schema.shape[0] * schema.shape[-1]
+             if metric in ("rank_ic_series", "pearson_ic_series") else schema.shape[-1])
+            for metric in schema.metric_ids)
+        if (context.metric_coverage != expected_coverage
+                or context.expected_coverage_count != sum(n for _, n in expected_coverage)):
+            raise ValueError("profile context metric coverage differs from its fixed schema")
+        if context.metric_error_tolerances != tuple(
+                (metric, 1e-10) for metric in schema.metric_ids):
+            raise ValueError("profile context error tolerances differ from its fixed schema")
 
     reports = _list(body["oracle_reports"], "oracle_reports")
     if len(reports) != 4:
@@ -343,15 +368,21 @@ def _check_report(payload):
     qualification = validate_source_route_profile_qualification(
         records, expected_context=context)
     expected_value_hashes = None
-    if schema.auto_values_must_match_profile:
+    expected_outputs = None
+    if schema.auto_values_must_match_profile or schema.full_auto_identity_required:
         profile = records[0].cuda if winner == "cuda" else records[0].cpu
-        expected_value_hashes = {item.metric_id: item.values_sha256 for item in profile.outputs}
+        if schema.auto_values_must_match_profile:
+            expected_value_hashes = {item.metric_id: item.values_sha256 for item in profile.outputs}
+        if schema.full_auto_identity_required:
+            expected_outputs = profile.outputs
     _check_auto_receipt(body["auto_verification"], context, winner, 4, "auto_verification",
-                        expected_value_hashes=expected_value_hashes)
+                        expected_value_hashes=expected_value_hashes,
+                        expected_outputs=expected_outputs)
     if is_v2:
         _check_auto_receipt(body["default_auto_verification"], context, winner, 5,
                             "default_auto_verification", default_auto=True,
-                            expected_value_hashes=expected_value_hashes)
+                            expected_value_hashes=expected_value_hashes,
+                            expected_outputs=expected_outputs)
 
     if qualification.winning_backend != winner:
         raise ValueError("report winner differs from its validated profile records")
