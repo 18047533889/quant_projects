@@ -90,7 +90,7 @@ class ResearchFeatureReceipt:
         if type(self.schema_version) is not int or self.schema_version != 1:
             raise ValueError("schema_version must be 1")
 
-        shape = tuple(self.shape)
+        shape = tuple(islice(iter(self.shape), 4))
         if (len(shape) != 3 or any(type(dim) is not int or dim <= 0 for dim in shape)
                 or shape[-1] != 1):
             raise ValueError("shape must be positive integer T×N×1")
