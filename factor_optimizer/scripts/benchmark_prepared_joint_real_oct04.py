@@ -123,6 +123,83 @@ def _array_digest(value):
             "sha256": digest.hexdigest()}
 
 
+def _canonical_lineage_value(value):
+    """Canonicalize supported frozen signature values without string fallbacks."""
+    from collections.abc import Mapping
+    from enum import Enum
+
+    if isinstance(value, Enum):
+        return ["enum", f"{type(value).__module__}.{type(value).__qualname__}",
+                _canonical_lineage_value(value.value)]
+    if isinstance(value, Mapping):
+        if any(type(key) is not str for key in value):
+            raise TypeError("treatment signature mapping keys must be strings")
+        return ["mapping", [[key, _canonical_lineage_value(value[key])]
+                             for key in sorted(value)]]
+    if isinstance(value, tuple):
+        return ["tuple", [_canonical_lineage_value(item) for item in value]]
+    if isinstance(value, list):
+        return ["list", [_canonical_lineage_value(item) for item in value]]
+    if isinstance(value, (set, frozenset)):
+        items = [_canonical_lineage_value(item) for item in value]
+        items = sorted(items, key=lambda item: json.dumps(
+            item, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False))
+        return ["frozenset" if isinstance(value, frozenset) else "set", items]
+    if isinstance(value, (np.ndarray, np.generic)):
+        raise TypeError("NumPy values are unsupported in treatment signatures")
+    if value is None:
+        return ["none"]
+    if type(value) is bool:
+        return ["bool", value]
+    if type(value) is int:
+        return ["int", str(value)]
+    if type(value) is float:
+        if not np.isfinite(value):
+            raise TypeError("non-finite floats are unsupported in treatment signatures")
+        return ["float", value.hex()]
+    if type(value) is str:
+        return ["str", value]
+    raise TypeError(f"unsupported treatment signature value {type(value).__qualname__}")
+
+
+def _canonical_treatment_signature(signature):
+    """Serialize every field of the supported immutable FP signature type."""
+    from dataclasses import fields
+    from factor_preprocess.contracts.treatment_lineage import ExistingTreatmentSignature
+
+    if type(signature) is not ExistingTreatmentSignature:
+        raise TypeError(
+            "leaf lineage must be ExistingTreatmentSignature, got "
+            f"{type(signature).__module__}.{type(signature).__qualname__}"
+        )
+    return {
+        "signature_type": f"{type(signature).__module__}.{type(signature).__qualname__}",
+        "fields": {
+            item.name: _canonical_lineage_value(getattr(signature, item.name))
+            for item in fields(ExistingTreatmentSignature)
+        },
+    }
+
+
+def _leaf_lineage_fingerprint(leaf_lineages):
+    """Hash factor IDs and their complete typed treatment signatures."""
+    from collections.abc import Mapping
+
+    if not isinstance(leaf_lineages, Mapping):
+        raise TypeError("leaf_lineages must be a mapping")
+    rows = []
+    for factor_id in sorted(leaf_lineages):
+        if type(factor_id) is not str or not factor_id:
+            raise TypeError("leaf lineage factor IDs must be non-empty strings")
+        rows.append({
+            "factor_id": factor_id,
+            "treatment_signature": _canonical_treatment_signature(
+                leaf_lineages[factor_id]),
+        })
+    return _json_digest(rows)
+
+
 def _rss_sampler():
     """Sample this process RSS; unlike ru_maxrss this is per-run, not cumulative."""
     page_size = os.sysconf("SC_PAGE_SIZE")
@@ -313,11 +390,14 @@ def run_audit(*, source_loader=None, auto_runner=None, resource_check=None,
     fingerprint = source_fingerprint(batch, labels, prefix_provenance)
     cohort_fingerprint = source_fingerprint(cohort, labels, provenance)
     runtime_fingerprint = _runtime_fingerprint()
+    lineage_fingerprint = _leaf_lineage_fingerprint(leaf_lineages)
 
     def source_check():
         if (source_fingerprint(batch, labels, prefix_provenance) != fingerprint
                 or source_fingerprint(cohort, labels, provenance) != cohort_fingerprint):
             raise RuntimeError("source data/provenance drift detected")
+        if _leaf_lineage_fingerprint(leaf_lineages) != lineage_fingerprint:
+            raise RuntimeError("leaf lineage drift detected")
         if _runtime_fingerprint() != runtime_fingerprint:
             raise RuntimeError("optimizer source/runtime drift detected")
 
@@ -360,6 +440,7 @@ def run_audit(*, source_loader=None, auto_runner=None, resource_check=None,
     report = {
         "audit": "prepared-joint-real-ab-oct04-v1",
         "source": prefix_provenance, "source_fingerprint": fingerprint,
+        "leaf_lineage_fingerprint": lineage_fingerprint,
         "runtime_fingerprint": runtime_fingerprint,
         "runtime_fingerprint_scope": list(_RUNTIME_FILES) + [
             "python version", "numpy version", "pandas/polars/FactorEngine/QuantEvaluator installed versions"],

@@ -54,3 +54,28 @@ typed scalar values rather than allocation addresses; unsupported object
 payloads fail closed. That allocation-independence check failed before the
 semantic hash fix, then passed. Numeric arrays retain exact dtype/shape/byte
 digests. Full real-data paired execution remains pending.
+
+## Lineage drift boundary (2026-10-04)
+
+The loader supplies treatment signatures separately from array/provenance
+metadata. The runner now fingerprints the complete ExistingTreatmentSignature
+for each actual prefix factor, including nested parameters and completeness
+status. Every source check compares this digest; the final report includes
+leaf_lineage_fingerprint. The representation is typed, mapping-order stable,
+and does not stringify unsupported objects. Nonfinite parameter floats and
+NumPy parameter objects are rejected rather than silently aliased.
+
+A bounded integration test changed only one live leaf signature between pair
+calls while values, labels and provenance remained unchanged. It failed before
+the fix (drift accepted, 1.55 seconds), then the identical test passed after the
+fix (1.10 seconds). Protocol tests including type separation and nested/status
+changes passed: 15 tests; combined with 25 FA research-receipt tests, 40 passed
+in 0.72 seconds. Additional boundary checks are regression tests after the
+implementation, not all independent RED/GREEN cycles.
+
+The runtime source fingerprint remains scoped to its explicitly listed files
+and installed versions, not a claim of transitive runtime closure. No real COS
+paired run was executed for this change. FE cold-start initialization currently
+fails at the intra_same_slot_zscore owner-identity guard in an independently
+reproduced broader integration test; do not bypass that guard or start real
+optimizer timing until its owner restores a verified cold-start path.

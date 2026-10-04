@@ -230,3 +230,104 @@ def test_real_snapshot_observes_values_masks_axes_and_complete_ledger(monkeypatc
     assert (snapshot(changed)["factors"]["f"]["candidate_ledger_sha256"]
             != baseline["factors"]["f"]["candidate_ledger_sha256"])
     assert calls
+
+
+def test_run_audit_rejects_leaf_lineage_drift_between_pair_calls(monkeypatch):
+    from dataclasses import replace
+    import importlib.util
+    import sys
+    from types import ModuleType
+    import numpy as np
+
+    from factor_preprocess.contracts.treatment_lineage import ExistingTreatmentSignature
+
+    fixture_path = Path(__file__).with_name("test_real_scaling_cohort_oct03.py")
+    fixture_spec = importlib.util.spec_from_file_location("lineage_cohort_fixture", fixture_path)
+    fixture_module = importlib.util.module_from_spec(fixture_spec)
+    fixture_spec.loader.exec_module(fixture_module)
+    batch, labels, provenance, _ = fixture_module.sample_cohort()
+    lineages = {
+        factor_id: ExistingTreatmentSignature()
+        for factor_id in batch.factor_ids
+    }
+    before_values = batch.values.copy()
+    before_label_values = labels.values.copy()
+    before_provenance = dict(provenance)
+
+    helpers = fixture_module.SOURCE_HELPERS
+    monkeypatch.setattr(helpers, "check_environment", lambda: None)
+    fake_cos = ModuleType("cos_batch_audit")
+    fake_cos.load_cos_sample = lambda **kwargs: (_ for _ in ()).throw(
+        AssertionError("injected source loader should be used")
+    )
+    monkeypatch.setitem(sys.modules, "cos_batch_audit", fake_cos)
+    monkeypatch.setattr(MODULE, "_runtime_fingerprint", lambda: "fixed-runtime")
+
+    attempted = []
+    proceeded = []
+    changed_factor = batch.factor_ids[0]
+
+    def invoke_pair_stub(**kwargs):
+        attempted.append(kwargs["mode"])
+        kwargs["source_check"]()
+        proceeded.append(kwargs["mode"])
+        if len(proceeded) == 1:
+            signature = kwargs["lineages"][changed_factor]
+            assert isinstance(signature, ExistingTreatmentSignature)
+            kwargs["lineages"][changed_factor] = replace(
+                signature, cs_rank=not signature.cs_rank
+            )
+        return {"factors": {}}, 0.0, 0
+
+    monkeypatch.setattr(MODULE, "_invoke_pair", invoke_pair_stub)
+    source_loader = lambda **kwargs: (batch, labels, provenance, lineages)
+    try:
+        MODULE.run_audit(
+            source_loader=source_loader,
+            auto_runner=lambda *args, **kwargs: (_ for _ in ()).throw(
+                AssertionError("optimizer must not run in this protocol test")
+            ),
+            resource_check=lambda: None,
+        )
+    except RuntimeError as exc:
+        assert "leaf lineage drift" in str(exc)
+    else:
+        raise AssertionError("leaf lineage drift was accepted between pair calls")
+
+    assert len(attempted) == 2
+    assert len(proceeded) == 1
+    assert np.array_equal(batch.values, before_values, equal_nan=True)
+    assert np.array_equal(labels.values, before_label_values, equal_nan=True)
+    assert provenance == before_provenance
+
+def test_lineage_canonical_encoding_is_type_separated_and_order_stable():
+    import numpy as np
+    import pytest
+    encode = MODULE._canonical_lineage_value
+    assert encode([1]) != encode((1,))
+    assert encode({1}) != encode(frozenset({1}))
+    assert encode({"x": 1}) != encode([("x", 1)])
+    assert encode("1") != encode(1)
+    assert encode(True) != encode(1)
+    assert encode(1) != encode(1.0)
+    assert encode({"a": 1, "b": 2}) == encode({"b": 2, "a": 1})
+    with pytest.raises(TypeError, match="non-finite"):
+        encode(float("nan"))
+    with pytest.raises(TypeError, match="NumPy"):
+        encode(np.longdouble("1.25"))
+
+
+def test_leaf_lineage_fingerprint_tracks_nested_params_and_status():
+    from dataclasses import replace
+    from factor_preprocess.contracts.treatment_lineage import ExistingTreatmentSignature
+
+    baseline = ExistingTreatmentSignature(winsor_params={"limits": [0.01, 0.99]})
+    equivalent = ExistingTreatmentSignature(winsor_params={"limits": [0.01, 0.99]})
+    changed = replace(baseline, winsor_params={"limits": [0.02, 0.99]})
+    fingerprint = MODULE._leaf_lineage_fingerprint
+    assert fingerprint({"factor": baseline}) == fingerprint({"factor": equivalent})
+    assert fingerprint({"factor": baseline}) != fingerprint({"factor": changed})
+    assert fingerprint({"factor": baseline}) != fingerprint({
+        "factor": replace(baseline, status="incomplete")})
+    assert fingerprint({"a": baseline, "b": equivalent}) == fingerprint({
+        "b": equivalent, "a": baseline})
