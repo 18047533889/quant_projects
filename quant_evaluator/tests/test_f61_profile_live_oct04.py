@@ -121,3 +121,47 @@ def test_oracle_failure_closes_source_and_cannot_authorize_routing(live, monkeyp
     assert live.calls["closed"] == 1 and not live.output.exists()
     progress = json.loads(live.output.with_suffix(".json.progress.json").read_text())
     assert progress["status"] == "failed" and progress["qualification_available"] is False
+
+
+def test_raw_2588_axes_align_to_fixed_2586_before_profiling(live, monkeypatch):
+    raw_dates, assets, rows = tuple(range(2588)), tuple(range(5461)), tuple(range(61))
+    monkeypatch.setattr(cli.tiles, "read_axis_index", lambda *a: (raw_dates, assets, rows))
+    original_load = cli.tiles.load_labels
+    observed = []
+    def load(dates, names, *args):
+        observed.append(len(dates))
+        return original_load(dates[:-2], names, *args)
+    monkeypatch.setattr(cli.tiles, "load_labels", load)
+    original_source = cli.source_batch._make_cos_source
+    def make(records, source_rows, dates, *args, **kwargs):
+        assert source_rows is rows
+        assert len(dates) == 2586
+        return original_source(records, source_rows, dates, *args, **kwargs)
+    monkeypatch.setattr(cli.source_batch, "_make_cos_source", make)
+    assert cli.main(live.args) == 0
+    assert observed == [2588] and live.calls["closed"] == 1
+    assert load_source_profile_report(live.output).records[0].context.request_shape == (2586, 5461, 61)
+
+
+def test_raw_admission_does_not_weaken_exact_aligned_shape(live, monkeypatch):
+    monkeypatch.setattr(cli.tiles, "read_axis_index", lambda *a:
+                        (tuple(range(2588)), tuple(range(5461)), tuple(range(61))))
+    original_load = cli.tiles.load_labels
+    loaded = []
+    def load(dates, names, *args):
+        loaded.append(True)
+        return original_load(dates[:-3], names, *args)
+    monkeypatch.setattr(cli.tiles, "load_labels", load)
+    with pytest.raises(SystemExit, match="loaded labels"):
+        cli.main(live.args)
+    assert loaded == [True] and live.calls["oracle"] == []
+    assert not live.output.exists()
+
+
+def test_raw_axis_alignment_admission_is_bounded(live, monkeypatch):
+    monkeypatch.setattr(cli.tiles, "read_axis_index", lambda *a:
+                        (tuple(range(2589)), tuple(range(5461)), tuple(range(61))))
+    monkeypatch.setattr(cli.tiles, "load_labels", lambda *a: pytest.fail("unbounded raw axes admitted"))
+    with pytest.raises(SystemExit, match="F61"):
+        cli.main(live.args)
+    assert live.calls["oracle"] == [] and not live.output.exists()

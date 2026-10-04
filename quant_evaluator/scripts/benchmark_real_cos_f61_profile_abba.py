@@ -17,6 +17,7 @@ from quant_evaluator.scripts.profile_progress_writer import ExclusiveProgressWri
 from quant_evaluator.scripts.research_cos_cli_preflight import preflight_research_cos_cli
 from quant_evaluator.scripts.source_all24_oracle import reference_source_all24
 from quant_evaluator.scripts.source_f61_auto_verification import verify_source_profile_auto
+from quant_evaluator.scripts.source_f61_axis_admission import validate_f61_raw_axes
 from quant_evaluator.scripts.source_profile_abba import (
     live_source_profile_context_observer, produce_source_route_profile_abba,
 )
@@ -95,8 +96,7 @@ def run_profile(args, schema, base):
             manifest_sha = tiles.MANIFEST_SHA256
             records = tiles.select_source_records(tiles.read_manifest(manifest_sha), 61, 128, 6144)
             dates, assets, rows = tiles.read_axis_index(args.axis_index, manifest_sha, records)
-            if (len(dates), len(assets), len(records)) != schema.shape:
-                raise SystemExit("axis index does not describe the fixed F61 full-history request")
+            validate_f61_raw_axes(dates, assets, records, schema)
             dates, assets, labels = tiles.load_labels(dates, assets, 0, 5500)
             if (len(dates), len(assets), len(records)) != schema.shape:
                 raise SystemExit("loaded labels changed the fixed F61 full-history axes")

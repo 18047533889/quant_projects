@@ -98,3 +98,9 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 .venv/bin/python -m pytest -q quant_eva
 - 随后完整 QE suite（session49282）终态为 1 failed, 6649 passed, 26 skipped, 81 warnings，224.36 秒。唯一失败是生成文档未包含新辅助函数及变化后的源码行号，不是忽略失败或声称此轮全部通过。
 - 使用既有 build_metric_reference 生成器重建文档，164 指标、5991 行。原失败所在文档七项加新标量四项独立复测 11 passed，0.36 秒。此后只有生成 Markdown 和本审查记录变化；未再次声称全套零失败。F61/COS 性能资格仍未开始。
 - FA 确定性候选顺序/重成员提前拒绝已双推并 root 核验：个人 main4919ab22cf890e941beb69637885a5c42650ea39，HKUST FA3d6a8fc8fabe22241b78be446ba2d1f140c25bac，FA tree368852d596f2ffab9228db502ae9fa73796c1b21。
+
+## 真实 F61 原始轴与标签对齐接线
+
+- peer 用既有严格 axis reader 核验真实轴索引：2588 日期、5461 股票、61 因子，manifest/checksum 一致。既有 load_labels 的注册 t/t+1/t+2 价格口径裁掉尾部两日，资格协议所需 2586 是对齐后的日期数。producer/provider 原先在标签对齐前比较 2586，会阻止真实请求。
+- producer 新测试实际 4 failed、2 passed（0.60 秒）；共享 source_f61_axis_admission 仅接受日期数 schema.T 到 schema.T+2、资产与因子数严格匹配，标签加载后仍要求完全相同的 schema.shape。原始 source_rows 对象与校验记录保持不变，没有伪造或裁切原始 receipts。
+- 首次修复后的两项测试因误用 SourceProfileReport.request_shape 报 AttributeError，测试改为该 typed API 的 records[0].context.request_shape 后，六项 raw-axis 测试 6 passed（0.52 秒），producer/CLI/四臂 warmup 27 passed（1.68 秒）。前后类型接口误用属于测试检查代码，不计为生产修复。尚未读取真实标签或运行真实 F61 性能资格，不能将编排 mock 的绿色等同为真实 qualification。
