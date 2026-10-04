@@ -1,0 +1,282 @@
+{
+  "kind": "real_cos_f48_linear_shape_fresh_provider.v1",
+  "status": "complete",
+  "run_started": true,
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "metric_ids": [
+    "quantile_curvature",
+    "quantile_tail_asymmetry",
+    "quantile_adjacent_spread",
+    "quantile_extreme_cliff",
+    "top_quantile_cliff",
+    "bottom_quantile_cliff"
+  ],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "oracle": "independent factor-only quantile/linear shape chain",
+  "runs": [
+    {
+      "run_index": 0,
+      "backend_used": "cuda",
+      "qualification_applied": true,
+      "qualification_status": "qualified_current_source",
+      "qualification_winner": "cuda",
+      "effective_max_tile_size": 5,
+      "oom_retries": 0,
+      "request_content_sha256": "dbf7f59a3c9609fb7f8b90e094d30355b77f08dd8e1dd5ac74118c012a7756f1",
+      "executable_source_sha256": "e4e1b872124ffa33ed67624b9c6b1fc99536fe1fd7a0ddfdf6faefc4f490d539",
+      "runtime_fingerprint_sha256": "c06cd6ff6e1e0c37cc87eb32255e1f07a5fad592726ec61ba5ce4d6834e7e2d6",
+      "correctness_digest_sha256": "77f4c2dc95a8d4cca88050b094363fe5ae46ae9b2e3a60e3248fcd878952b95f",
+      "context": {
+        "request_content_sha256": "dbf7f59a3c9609fb7f8b90e094d30355b77f08dd8e1dd5ac74118c012a7756f1",
+        "source_identity_sha256": "c4e72bca26600b580058738420ed0f7cb6942f3493123109ee3947b284fbd52c",
+        "source_content_sha256": "992f66d03322b40eb72d1779e993d72fae1a9b7b15730d701735c6040e587fb2",
+        "executable_source_sha256": "e4e1b872124ffa33ed67624b9c6b1fc99536fe1fd7a0ddfdf6faefc4f490d539",
+        "runtime_fingerprint_sha256": "c06cd6ff6e1e0c37cc87eb32255e1f07a5fad592726ec61ba5ce4d6834e7e2d6",
+        "package_fingerprint_sha256": "1f92182dd26ed022ef66e0af54104965281406f307a862784c130731927ca46a",
+        "thread_fingerprint_sha256": "5174559af9bad3a65a07b43ed97ee7db66e80a75f755992d5edb2ec9ed2057b1",
+        "device_fingerprint_sha256": "78f7e741c128013e808138552fd330090e20662b63ed955c2f48cf88d8925c05",
+        "common_config_fingerprint_sha256": "a78bd34c1df0a1bc058090e94f0240690289f3371ba34cb882c85ad043b28026",
+        "request_shape": [
+          2586,
+          5461,
+          48
+        ],
+        "metric_ids": [
+          "quantile_curvature",
+          "quantile_tail_asymmetry",
+          "quantile_adjacent_spread",
+          "quantile_extreme_cliff",
+          "top_quantile_cliff",
+          "bottom_quantile_cliff"
+        ],
+        "expected_coverage_count": 288,
+        "requested_tile_size": 16,
+        "timing_scope": "evaluate_factor_source_batch_wall_v1",
+        "metric_coverage": [
+          [
+            "quantile_curvature",
+            48
+          ],
+          [
+            "quantile_tail_asymmetry",
+            48
+          ],
+          [
+            "quantile_adjacent_spread",
+            48
+          ],
+          [
+            "quantile_extreme_cliff",
+            48
+          ],
+          [
+            "top_quantile_cliff",
+            48
+          ],
+          [
+            "bottom_quantile_cliff",
+            48
+          ]
+        ],
+        "metric_error_tolerances": [
+          [
+            "quantile_curvature",
+            1e-10
+          ],
+          [
+            "quantile_tail_asymmetry",
+            1e-10
+          ],
+          [
+            "quantile_adjacent_spread",
+            1e-10
+          ],
+          [
+            "quantile_extreme_cliff",
+            1e-10
+          ],
+          [
+            "top_quantile_cliff",
+            1e-10
+          ],
+          [
+            "bottom_quantile_cliff",
+            1e-10
+          ]
+        ],
+        "live_source_admitted_max_tile_size": 5,
+        "gpu_admitted_max_tile_size": 5
+      },
+      "source_qualification_origin": "report_candidate",
+      "source_qualification_provider_status": "candidate_validated",
+      "source_qualification_cache_status": "supplied",
+      "output_matches_independent_oracle": true,
+      "metric_identities": {
+        "quantile_curvature": {
+          "values_sha256": "a1a12b27bcf6f5c77acf9406ae05d6b9b03c5c06dad2b1f773b545a7dc40095e",
+          "finite_mask_sha256": "8a1b31c3e0366324c3b73fab40ffe90d4faa93ef8af0fde7b68c0cc6d9dd1984",
+          "observation_counts_sha256": "f092cf2de46ea0f3849ab9a73b8173c6ece4a00dd78fb4602183655bc3ba9b49"
+        },
+        "quantile_tail_asymmetry": {
+          "values_sha256": "f30bfb44d096229ef03b479d1cebc546a948fef54e4e11c8d37b63a861c676fd",
+          "finite_mask_sha256": "8a1b31c3e0366324c3b73fab40ffe90d4faa93ef8af0fde7b68c0cc6d9dd1984",
+          "observation_counts_sha256": "f092cf2de46ea0f3849ab9a73b8173c6ece4a00dd78fb4602183655bc3ba9b49"
+        },
+        "quantile_adjacent_spread": {
+          "values_sha256": "e0e24269a72ebd450169c63f7f409e6189177867a096db88d59b23f763d19add",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "quantile_extreme_cliff": {
+          "values_sha256": "6c50c1af8778c0e9637b2bbb7b2f89eef84c4abfa8607ab73ae5799c265474dc",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "top_quantile_cliff": {
+          "values_sha256": "0d41d277593462e67a31d308adc64ae35a5f524a6c2f14f3df12597749bb5f42",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "bottom_quantile_cliff": {
+          "values_sha256": "38adb06d2df4ed959b10ed0ab96ad0048c5549f46fe45ceb150b8f94ff7ed7d5",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        }
+      }
+    },
+    {
+      "run_index": 1,
+      "backend_used": "cuda",
+      "qualification_applied": true,
+      "qualification_status": "qualified_current_source",
+      "qualification_winner": "cuda",
+      "effective_max_tile_size": 5,
+      "oom_retries": 0,
+      "request_content_sha256": "dbf7f59a3c9609fb7f8b90e094d30355b77f08dd8e1dd5ac74118c012a7756f1",
+      "executable_source_sha256": "e4e1b872124ffa33ed67624b9c6b1fc99536fe1fd7a0ddfdf6faefc4f490d539",
+      "runtime_fingerprint_sha256": "c06cd6ff6e1e0c37cc87eb32255e1f07a5fad592726ec61ba5ce4d6834e7e2d6",
+      "correctness_digest_sha256": "77f4c2dc95a8d4cca88050b094363fe5ae46ae9b2e3a60e3248fcd878952b95f",
+      "context": {
+        "request_content_sha256": "dbf7f59a3c9609fb7f8b90e094d30355b77f08dd8e1dd5ac74118c012a7756f1",
+        "source_identity_sha256": "c4e72bca26600b580058738420ed0f7cb6942f3493123109ee3947b284fbd52c",
+        "source_content_sha256": "992f66d03322b40eb72d1779e993d72fae1a9b7b15730d701735c6040e587fb2",
+        "executable_source_sha256": "e4e1b872124ffa33ed67624b9c6b1fc99536fe1fd7a0ddfdf6faefc4f490d539",
+        "runtime_fingerprint_sha256": "c06cd6ff6e1e0c37cc87eb32255e1f07a5fad592726ec61ba5ce4d6834e7e2d6",
+        "package_fingerprint_sha256": "1f92182dd26ed022ef66e0af54104965281406f307a862784c130731927ca46a",
+        "thread_fingerprint_sha256": "5174559af9bad3a65a07b43ed97ee7db66e80a75f755992d5edb2ec9ed2057b1",
+        "device_fingerprint_sha256": "78f7e741c128013e808138552fd330090e20662b63ed955c2f48cf88d8925c05",
+        "common_config_fingerprint_sha256": "a78bd34c1df0a1bc058090e94f0240690289f3371ba34cb882c85ad043b28026",
+        "request_shape": [
+          2586,
+          5461,
+          48
+        ],
+        "metric_ids": [
+          "quantile_curvature",
+          "quantile_tail_asymmetry",
+          "quantile_adjacent_spread",
+          "quantile_extreme_cliff",
+          "top_quantile_cliff",
+          "bottom_quantile_cliff"
+        ],
+        "expected_coverage_count": 288,
+        "requested_tile_size": 16,
+        "timing_scope": "evaluate_factor_source_batch_wall_v1",
+        "metric_coverage": [
+          [
+            "quantile_curvature",
+            48
+          ],
+          [
+            "quantile_tail_asymmetry",
+            48
+          ],
+          [
+            "quantile_adjacent_spread",
+            48
+          ],
+          [
+            "quantile_extreme_cliff",
+            48
+          ],
+          [
+            "top_quantile_cliff",
+            48
+          ],
+          [
+            "bottom_quantile_cliff",
+            48
+          ]
+        ],
+        "metric_error_tolerances": [
+          [
+            "quantile_curvature",
+            1e-10
+          ],
+          [
+            "quantile_tail_asymmetry",
+            1e-10
+          ],
+          [
+            "quantile_adjacent_spread",
+            1e-10
+          ],
+          [
+            "quantile_extreme_cliff",
+            1e-10
+          ],
+          [
+            "top_quantile_cliff",
+            1e-10
+          ],
+          [
+            "bottom_quantile_cliff",
+            1e-10
+          ]
+        ],
+        "live_source_admitted_max_tile_size": 5,
+        "gpu_admitted_max_tile_size": 5
+      },
+      "source_qualification_origin": "process_cache",
+      "source_qualification_provider_status": "not_checked",
+      "source_qualification_cache_status": "cache_hit",
+      "output_matches_independent_oracle": true,
+      "metric_identities": {
+        "quantile_curvature": {
+          "values_sha256": "a1a12b27bcf6f5c77acf9406ae05d6b9b03c5c06dad2b1f773b545a7dc40095e",
+          "finite_mask_sha256": "8a1b31c3e0366324c3b73fab40ffe90d4faa93ef8af0fde7b68c0cc6d9dd1984",
+          "observation_counts_sha256": "f092cf2de46ea0f3849ab9a73b8173c6ece4a00dd78fb4602183655bc3ba9b49"
+        },
+        "quantile_tail_asymmetry": {
+          "values_sha256": "f30bfb44d096229ef03b479d1cebc546a948fef54e4e11c8d37b63a861c676fd",
+          "finite_mask_sha256": "8a1b31c3e0366324c3b73fab40ffe90d4faa93ef8af0fde7b68c0cc6d9dd1984",
+          "observation_counts_sha256": "f092cf2de46ea0f3849ab9a73b8173c6ece4a00dd78fb4602183655bc3ba9b49"
+        },
+        "quantile_adjacent_spread": {
+          "values_sha256": "e0e24269a72ebd450169c63f7f409e6189177867a096db88d59b23f763d19add",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "quantile_extreme_cliff": {
+          "values_sha256": "6c50c1af8778c0e9637b2bbb7b2f89eef84c4abfa8607ab73ae5799c265474dc",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "top_quantile_cliff": {
+          "values_sha256": "0d41d277593462e67a31d308adc64ae35a5f524a6c2f14f3df12597749bb5f42",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        },
+        "bottom_quantile_cliff": {
+          "values_sha256": "38adb06d2df4ed959b10ed0ab96ad0048c5549f46fe45ceb150b8f94ff7ed7d5",
+          "finite_mask_sha256": "73095e9933b13a5820c5a141d4d1d8542dcdc0e5975540255c22747990e13a6b",
+          "observation_counts_sha256": "4287072c6e93a5f5fe8a96cf3d15c23087db7bb740f8ca56903743f66ed258cd"
+        }
+      }
+    }
+  ]
+}

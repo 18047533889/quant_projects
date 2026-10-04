@@ -1,0 +1,751 @@
+{
+  "kind": "real_cos_f48_linear_shape_randomized_trials.v1",
+  "status": "complete",
+  "shape": [
+    2586,
+    5461,
+    48
+  ],
+  "metric_ids": [
+    "quantile_curvature",
+    "quantile_tail_asymmetry",
+    "quantile_adjacent_spread",
+    "quantile_extreme_cliff",
+    "top_quantile_cliff",
+    "bottom_quantile_cliff"
+  ],
+  "manifest_sha256": "b2cf8709e68d0d2b3168fcf3a4ccbb207b4be0f1be510e77df01b9ddb42e6864",
+  "requested_tile_cap": 16,
+  "seed": 20261004,
+  "pairs": 3,
+  "qualification_available": false,
+  "preflight": {
+    "pass": true,
+    "available_ram_bytes": 62644019200,
+    "minimum_available_ram_bytes": 34359738368,
+    "cos_cache_disk_free_bytes": 165560979456,
+    "required_disk_bytes": 5368709120
+  },
+  "schedule": [
+    [
+      "cuda_strict",
+      "cpu"
+    ],
+    [
+      "cpu",
+      "cuda_strict"
+    ],
+    [
+      "cpu",
+      "cuda_strict"
+    ]
+  ],
+  "trials": [
+    {
+      "execution_order": [
+        "cuda_strict",
+        "cpu"
+      ],
+      "context_fingerprint": "97ac00c3cb3af067552d9adfd3b96009f768e2bfb33d5ccbfbc00a9e7f6534ed",
+      "timing_scope": "evaluate_factor_source_batch_wall_v1",
+      "cpu_seconds": 116.03170669701649,
+      "cuda_seconds": 66.87503061397001,
+      "cpu_oracle_pass": true,
+      "cuda_oracle_pass": true,
+      "parity_pass": true
+    },
+    {
+      "execution_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "context_fingerprint": "97ac00c3cb3af067552d9adfd3b96009f768e2bfb33d5ccbfbc00a9e7f6534ed",
+      "timing_scope": "evaluate_factor_source_batch_wall_v1",
+      "cpu_seconds": 118.97837923798943,
+      "cuda_seconds": 64.19567865901627,
+      "cpu_oracle_pass": true,
+      "cuda_oracle_pass": true,
+      "parity_pass": true
+    },
+    {
+      "execution_order": [
+        "cpu",
+        "cuda_strict"
+      ],
+      "context_fingerprint": "97ac00c3cb3af067552d9adfd3b96009f768e2bfb33d5ccbfbc00a9e7f6534ed",
+      "timing_scope": "evaluate_factor_source_batch_wall_v1",
+      "cpu_seconds": 123.98216264403891,
+      "cuda_seconds": 65.0652852130006,
+      "cpu_oracle_pass": true,
+      "cuda_oracle_pass": true,
+      "parity_pass": true
+    }
+  ],
+  "aggregate": {
+    "schema": "source_profile_paired_trials.aggregate.v1",
+    "pair_count": 3,
+    "context_fingerprint": "97ac00c3cb3af067552d9adfd3b96009f768e2bfb33d5ccbfbc00a9e7f6534ed",
+    "timing_scope": "evaluate_factor_source_batch_wall_v1",
+    "execution_orders": [
+      [
+        "cuda_strict",
+        "cpu"
+      ],
+      [
+        "cpu",
+        "cuda_strict"
+      ],
+      [
+        "cpu",
+        "cuda_strict"
+      ]
+    ],
+    "pair_winners": [
+      "cuda",
+      "cuda",
+      "cuda"
+    ],
+    "pair_wins": {
+      "cpu": 0,
+      "cuda": 3,
+      "tie": 0
+    },
+    "median_seconds": {
+      "cpu": 118.97837923798943,
+      "cuda": 65.0652852130006
+    },
+    "aggregate_pass": true,
+    "winner": "cuda"
+  },
+  "full_oracle_reports": [
+    {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 0,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.8973538018496328e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.168404344971009e-19,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 3.7947076036992655e-19,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cpu",
+      "run_index": 1,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1384122811097797e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.8189256484623115e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.2341624917916505e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.951563910473908e-18,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cpu",
+      "run_index": 2,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1384122811097797e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.8189256484623115e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.2341624917916505e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.951563910473908e-18,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 3,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.8973538018496328e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.168404344971009e-19,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 3.7947076036992655e-19,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cpu",
+      "run_index": 4,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.1384122811097797e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.8189256484623115e-18,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 6.2341624917916505e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.5178830414797062e-18,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.951563910473908e-18,
+          "tolerance": 1e-10
+        }
+      }
+    },
+    {
+      "pass": true,
+      "backend": "cuda",
+      "run_index": 5,
+      "metrics": {
+        "quantile_curvature": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 1.8973538018496328e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_tail_asymmetry": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_adjacent_spread": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        },
+        "quantile_extreme_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 2.168404344971009e-19,
+          "tolerance": 1e-10
+        },
+        "top_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 3.7947076036992655e-19,
+          "tolerance": 1e-10
+        },
+        "bottom_quantile_cliff": {
+          "pass": true,
+          "expected_coverage": 48,
+          "observed_coverage": 48,
+          "shape_equal": true,
+          "finite_mask_equal": true,
+          "nan_mask_equal": true,
+          "positive_infinity_mask_equal": true,
+          "negative_infinity_mask_equal": true,
+          "observation_counts_equal": true,
+          "max_abs_error": 4.336808689942018e-19,
+          "tolerance": 1e-10
+        }
+      }
+    }
+  ],
+  "resource_receipts": [
+    {
+      "backend_used": "cuda",
+      "seconds": 66.87503061397001,
+      "total_wall_seconds": 66.87503061397001,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": 5,
+      "effective_max_tile_size": 5
+    },
+    {
+      "backend_used": "cpu",
+      "seconds": 116.03170669701649,
+      "total_wall_seconds": 116.03170669701649,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": null,
+      "effective_max_tile_size": 5
+    },
+    {
+      "backend_used": "cpu",
+      "seconds": 118.97837923798943,
+      "total_wall_seconds": 118.97837923798943,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": null,
+      "effective_max_tile_size": 5
+    },
+    {
+      "backend_used": "cuda",
+      "seconds": 64.19567865901627,
+      "total_wall_seconds": 64.19567865901627,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": 5,
+      "effective_max_tile_size": 5
+    },
+    {
+      "backend_used": "cpu",
+      "seconds": 123.98216264403891,
+      "total_wall_seconds": 123.98216264403891,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": null,
+      "effective_max_tile_size": 5
+    },
+    {
+      "backend_used": "cuda",
+      "seconds": 65.0652852130006,
+      "total_wall_seconds": 65.0652852130006,
+      "oom_retries": 0,
+      "actual_source_tile_size": 5,
+      "actual_gpu_factor_tile_size": 5,
+      "effective_max_tile_size": 5
+    }
+  ],
+  "run_started": true,
+  "validated_runs": [
+    {
+      "phase": "run_validated",
+      "pair_index": 0,
+      "run_index": 0,
+      "requested_backend": "cuda_strict",
+      "backend_used": "cuda",
+      "api_wall_seconds": 66.87503061397001,
+      "oracle_pass": true,
+      "measurement_pass": true
+    },
+    {
+      "phase": "run_validated",
+      "pair_index": 0,
+      "run_index": 1,
+      "requested_backend": "cpu",
+      "backend_used": "cpu",
+      "api_wall_seconds": 116.03170669701649,
+      "oracle_pass": true,
+      "measurement_pass": true
+    },
+    {
+      "phase": "run_validated",
+      "pair_index": 1,
+      "run_index": 2,
+      "requested_backend": "cpu",
+      "backend_used": "cpu",
+      "api_wall_seconds": 118.97837923798943,
+      "oracle_pass": true,
+      "measurement_pass": true
+    },
+    {
+      "phase": "run_validated",
+      "pair_index": 1,
+      "run_index": 3,
+      "requested_backend": "cuda_strict",
+      "backend_used": "cuda",
+      "api_wall_seconds": 64.19567865901627,
+      "oracle_pass": true,
+      "measurement_pass": true
+    },
+    {
+      "phase": "run_validated",
+      "pair_index": 2,
+      "run_index": 4,
+      "requested_backend": "cpu",
+      "backend_used": "cpu",
+      "api_wall_seconds": 123.98216264403891,
+      "oracle_pass": true,
+      "measurement_pass": true
+    },
+    {
+      "phase": "run_validated",
+      "pair_index": 2,
+      "run_index": 5,
+      "requested_backend": "cuda_strict",
+      "backend_used": "cuda",
+      "api_wall_seconds": 65.0652852130006,
+      "oracle_pass": true,
+      "measurement_pass": true
+    }
+  ]
+}
