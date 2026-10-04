@@ -27,6 +27,7 @@ from quant_evaluator.runtime.source_auto_authority import (
 from quant_evaluator.contracts.factor_tile_source import admitted_source_tile_limit
 from quant_evaluator.runtime.source_profile_router import (
     SourceProfileQualificationError, discard_source_route_profile_cache,
+    capture_source_profile_read_prefix,
     get_cached_source_route_profile_records, is_source_route_profile_pair,
     qualify_source_route_profiles, validate_source_route_profile_execution,
 )
@@ -381,6 +382,8 @@ def evaluate_factor_source_batch(
             effective_tile_size,
             policy.max_factor_tile_size or effective_tile_size)
     effective_tile_size = min(effective_tile_size, memory_tile_limit)
+    source_read_prefix = (capture_source_profile_read_prefix(
+        source, len(metadata.factor_ids)) if profile_decision is not None else None)
     if route == "cuda_strict":
         from quant_evaluator.runtime.device_session import DeviceEvaluationSession
         from quant_evaluator.runtime.gpu_executor import GPUExecutor
@@ -421,7 +424,8 @@ def evaluate_factor_source_batch(
             expected_context=profile_decision.context, metadata=metadata,
             metrics=selected, request_fingerprint=request_fingerprint,
             requested_tile_size=requested_tile_width, policy=policy,
-            backend="cuda" if route == "cuda_strict" else "cpu")
+            backend="cuda" if route == "cuda_strict" else "cpu",
+            source_read_prefix=source_read_prefix)
         if execution_mismatch is not None:
             if qualification_origin == "report_candidate":
                 qualification_provider_status = "candidate_execution_deviated"

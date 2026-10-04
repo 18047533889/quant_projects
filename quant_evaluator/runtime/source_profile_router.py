@@ -342,13 +342,26 @@ __all__ = (
 )
 
 
+def capture_source_profile_read_prefix(source, factor_count: int) -> tuple | None:
+    """Snapshot append-only read history without clearing a reusable source."""
+    ranges = getattr(source, "reads", None)
+    if (type(ranges) not in (list, tuple)
+            or not all(type(item) is tuple and len(item) == 2
+                       and type(item[0]) is int and type(item[1]) is int
+                       and 0 <= item[0] < item[1] <= factor_count
+                       for item in ranges)):
+        return None
+    return tuple(ranges)
+
+
 def validate_source_route_profile_execution(
     *, source, output, profile: BackendRouteProfileMeasurement,
     expected_context: SourceRouteProfileContext, metadata, metrics,
     request_fingerprint: str, requested_tile_size: int,
     policy: GPUExecutionPolicy, backend: str,
+    source_read_prefix: tuple | None = (),
 ) -> str | None:
-    """Return a short mismatch reason for actual reads and post-run live state."""
+    """Check only new reads, preserving and verifying the pre-run history."""
     ranges = getattr(source, "reads", None)
     expected_ranges = profile.source_ranges
     valid_ranges = (
@@ -356,7 +369,10 @@ def validate_source_route_profile_execution(
         and all(type(item) is tuple and len(item) == 2
                 and type(item[0]) is int and type(item[1]) is int
                 for item in ranges)
-        and tuple(ranges) == expected_ranges
+        and type(source_read_prefix) is tuple
+        and len(ranges) >= len(source_read_prefix)
+        and tuple(ranges[:len(source_read_prefix)]) == source_read_prefix
+        and tuple(ranges[len(source_read_prefix):]) == expected_ranges
     )
     tile_count = output.metadata.get("factor_tiles_processed")
     valid_count = (type(tile_count) is int
