@@ -33,6 +33,7 @@ import pytest
 
 warnings.filterwarnings("ignore")
 
+from quant_evaluator.contracts.errors import InvalidContractError
 from quant_evaluator.contracts._hashutil import stable_content_hex
 from quant_evaluator.contracts.artifact_types import ProbePortfolioArtifact
 from quant_evaluator.contracts.factor_batch import AxisRef, FactorBatch
@@ -72,13 +73,6 @@ _DECLARED_FAILURES = (
     "unresolved required parameters",
     "requires typed",
     "requires authoritative",
-    "must be a positive integer",
-    "Generalization evidence factor axis must match",
-    "time_index entries must be timezone-aware",
-    # The probe/calendar coordinate pair must be produced by the caller's own
-    # data pipeline (session-aligned instants + matching snapshot); the
-    # synthetic fixture is deliberately coordinate-mismatched.
-    "Portfolio time coordinates do not match",
     "requires an explicit non-default metric_instance",
     "requires explicit factor identities",
 )
@@ -109,6 +103,24 @@ _DECLARED_UNBOUND = {
     "ic_decay",
 }
 
+_IC_DECAY_UNAVAILABLE = (
+    "Metric ic_decay requires unavailable artifact builder HorizonMeanIC"
+)
+
+
+def _is_expected_input_failure(metric_id: str, exc: Exception) -> bool:
+    """Recognize only declared public-contract failures, never kernel errors."""
+    if not isinstance(exc, InvalidContractError):
+        return False
+    message = str(exc)
+    if metric_id in _DECLARED_UNBOUND:
+        return metric_id == "ic_decay" and message == _IC_DECAY_UNAVAILABLE
+    return any(token in message for token in _DECLARED_FAILURES)
+
+
+def _failure_summary(failures: tuple[InvalidContractError, ...]) -> str:
+    return " | ".join(f"{type(exc).__name__}: {exc}" for exc in failures)
+
 
 @pytest.fixture(scope="module")
 def qe_inputs():
@@ -119,7 +131,10 @@ def qe_inputs():
     labels = rng.normal(size=(_T, _N))
     fvals[rng.random(fvals.shape) < 0.05] = np.nan
     labels[rng.random(labels.shape) < 0.05] = np.nan
-    fb = FactorBatch(("prof",), times, assets, np.ascontiguousarray(fvals))
+    fb = FactorBatch(
+        ("prof",), times, assets, np.ascontiguousarray(fvals),
+        context_refs={"factor_versions": {"prof": "v1"}},
+    )
     lb = LabelBundle(
         target_id="r",
         values=np.ascontiguousarray(labels),
@@ -148,13 +163,13 @@ def qe_inputs():
     )
 
     generalization = build_train_validation_artifact(
-        np.array([1.2, 0.8]), np.array([1.0, 0.4]),
-        train_rankic=np.array([0.03, 0.02]), validation_rankic=np.array([0.02, 0.01]),
-        train_icir=np.array([0.5, 0.3]), validation_icir=np.array([0.4, 0.2]),
-        train_sharpe=np.array([1.5, 1.0]), validation_sharpe=np.array([1.2, 0.8]),
-        train_shape=np.array([1.0, 0.9]), validation_shape=np.array([0.9, 0.8]),
-        train_factor_ids=("f0", "f1"), validation_factor_ids=("f0", "f1"),
-        train_factor_versions=("v1", "v1"), validation_factor_versions=("v1", "v1"),
+        np.array([1.2]), np.array([1.0]),
+        train_rankic=np.array([0.03]), validation_rankic=np.array([0.02]),
+        train_icir=np.array([0.5]), validation_icir=np.array([0.4]),
+        train_sharpe=np.array([1.5]), validation_sharpe=np.array([1.2]),
+        train_shape=np.array([1.0]), validation_shape=np.array([0.9]),
+        train_factor_ids=("prof",), validation_factor_ids=("prof",),
+        train_factor_versions=("v1",), validation_factor_versions=("v1",),
         metric_instance="rank_ic:h1:daily",
         metric_instance_refs={
             "rankic": "ab:rankic", "icir": "ab:icir",
@@ -162,32 +177,11 @@ def qe_inputs():
         },
     )
 
-    # Calendar metrics need timezone-aware instants on the probe time axis.
-    import datetime as _dt
-    base = _dt.datetime(2024, 1, 1, 15, 0, tzinfo=_dt.timezone(_dt.timedelta(hours=8)))
-    instants = tuple(base + _dt.timedelta(days=i) for i in range(_T))
-    probe_cal = ProbePortfolioArtifact(
-        np.ascontiguousarray(np.asarray(series.values, dtype=np.float64)),
-        time_index=instants,
-        factor_ids=("prof",),
-    )
-    from data_access.r30.calendar_snapshot import CalendarSnapshot
-    days = tuple(d.date().isoformat() for d in instants)
-    sessions = tuple((d, "09:30:00", "15:00:00", 1) for d in days)
-    calendar = CalendarSnapshot(
-        market="CN", source_version="ab-contract", timezone="Asia/Shanghai",
-        trading_days=days, sessions=sessions, early_close=(), snapshot_id="ab-snap",
-    )
-
     probe_group = dict(portfolio_returns=probe, generalization_evidence=generalization)
-    calendar_group = dict(
-        portfolio_returns=probe_cal, calendar_snapshot=calendar,
-        generalization_evidence=generalization,
-    )
     return fb, lb, probe_group, dict(
         holding_returns=holding, portfolio_spec=spec,
         generalization_evidence=generalization,
-    ), calendar_group
+    ), {}
 
 
 def _fingerprint(bundle) -> str:
@@ -207,19 +201,30 @@ def _fingerprint(bundle) -> str:
 
 
 def _run(fb, lb, metric_id, qe_inputs):
-    """Try each declared input group; return (bundle, None) or (None, error)."""
+    """Try input groups, retaining typed contract failures; bugs propagate."""
+    if metric_id.startswith("worst_calendar_"):
+        from quant_evaluator.tests.metrics.test_special_input_metrics import _calendar_inputs
+        calendar_fb, calendar_lb, probe, snapshot = _calendar_inputs()
+        return evaluate(
+            calendar_fb, calendar_lb, metrics=(metric_id,),
+            portfolio_returns=probe, calendar_snapshot=snapshot,
+        ), None
+    if metric_id == "turnover_cost":
+        from quant_evaluator.tests.metrics.test_special_input_metrics import _int_inputs
+        cost_fb, cost_lb, _, _, cost = _int_inputs()
+        return evaluate(
+            cost_fb, cost_lb, metrics=(metric_id,), portfolio_returns=cost,
+        ), None
     fb, lb, probe_kw, holding_kw, calendar_kw = qe_inputs
     seen = []
-    for kw in (probe_kw, holding_kw, calendar_kw, {}):
+    # Calendar/cost fixtures have their own matching axes and typed legs above.
+    # Never retry an integer-axis factor with a relabelled datetime probe.
+    for kw in (probe_kw, holding_kw, {}):
         try:
             return evaluate(fb, lb, metrics=(metric_id,), **kw), None
-        except Exception as exc:  # noqa: BLE001
-            text = f"{type(exc).__name__}: {exc}"
-            if text not in seen:
-                seen.append(text)
-    # Report every distinct reason so a declared-requirement token is not
-    # masked by the last (input-less) attempt.
-    return None, " | ".join(seen)
+        except InvalidContractError as exc:
+            seen.append(exc)
+    return None, tuple(seen)
 
 
 @pytest.mark.parametrize("metric_id", sorted(list_all_metric_ids()))
@@ -236,14 +241,9 @@ def test_every_metric_is_executable_or_declares_its_requirement(metric_id, qe_in
         )
         return
     assert err is not None
-    if metric_id in _DECLARED_UNBOUND:
-        return
-    assert not re.search(r"not registered", err), (
-        f"{metric_id} has a catalog entry but no registered compute function, "
-        f"and is NOT in _DECLARED_UNBOUND: {err}"
-    )
-    assert any(token in err for token in _DECLARED_FAILURES), (
-        f"{metric_id} failed with an undeclared error, which is a defect: {err}"
+    assert err and all(_is_expected_input_failure(metric_id, exc) for exc in err), (
+        f"{metric_id} failed with an undeclared error, which is a defect: "
+        f"{_failure_summary(err)}"
     )
 
 
@@ -288,8 +288,9 @@ def test_batch_evaluation_equals_single_metric_evaluation(qe_inputs):
         try:
             evaluate(fb, lb, metrics=(candidate,), **probe_kw)
             evaluable.append(candidate)
-        except Exception:  # noqa: BLE001
-            continue
+        except InvalidContractError as exc:
+            if not _is_expected_input_failure(candidate, exc):
+                raise
     assert len(evaluable) >= 5, (
         f"expected at least 5 evaluable batch metrics, got {evaluable}"
     )
@@ -334,8 +335,9 @@ def _timeit(fb, lb, metric_id, qe_inputs) -> float:
             start = time.perf_counter()
             evaluate(fb, lb, metrics=(metric_id,), **kw)
             return time.perf_counter() - start
-        except Exception:  # noqa: BLE001
-            continue
+        except InvalidContractError as exc:
+            if not _is_expected_input_failure(metric_id, exc):
+                raise
     return float("inf")
 
 

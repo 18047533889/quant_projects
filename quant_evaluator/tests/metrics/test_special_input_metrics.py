@@ -304,6 +304,28 @@ def test_calendar_metric_oracle_matches_documented_formula(function, days, obser
     returns = np.full((len(observed), 1), daily)
     artifact = function(returns, instants, ("f",), snap)
     assert artifact.values[0] == pytest.approx(expected)
+    # Exercise the facade too: correct low-level arithmetic alone does not
+    # prove typed portfolio inputs, coordinates and metric output are wired.
+    assets = AxisRef("asset", "str", 2, ("A", "B"))
+    time_axis = AxisRef("time", "datetime", len(instants),
+                       np.asarray(instants, dtype=object))
+    factor = FactorBatch(("f",), time_axis, assets,
+                         np.zeros((len(instants), 2, 1)))
+    label = LabelBundle(
+        "calendar-oracle", np.zeros((len(instants), 2)), 1,
+        decision_time=instants, label_start_time=instants,
+        label_end_time=tuple(t + dt.timedelta(days=1) for t in instants),
+        asset_axis=assets,
+    )
+    probe = ProbePortfolioArtifact(returns, time_index=instants, factor_ids=("f",))
+    metric_id = function.__name__.replace("compute_", "")
+    result = evaluate(
+        factor, label, metrics=(metric_id,), portfolio_returns=probe,
+        calendar_snapshot=snap,
+    ).metric_values[metric_id]
+    assert result.valid is True
+    assert result.observation_count == 1
+    assert result.value == pytest.approx(expected)
 
 
 # --------------------------------------------------------------------------
